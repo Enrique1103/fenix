@@ -23,9 +23,11 @@ class TaskCreate(BaseModel):
     type: str
     deadline: Optional[str] = None
     parent_task_id: Optional[int] = None
+    description: Optional[str] = None
 
 
 class TaskUpdate(BaseModel):
     title: Optional[str] = None
     completed: Optional[bool] = None
     deadline: Optional[str] = None
+    description: Optional[str] = None

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react"
 import { Plus, Pencil, Trash2, Check, X, Bell, MessageSquareQuote, Clock, LogOut } from "lucide-react"
-import { getHabits, createHabit, updateHabit, deleteHabit, resetMonth, resetAll } from "@/lib/api"
+import { getHabits, createHabit, updateHabit, deleteHabit, resetMonth, resetAll, reorderHabits } from "@/lib/api"
 import { Habit } from "@/lib/types"
 import { getSettings, saveSettings, QuoteSettings } from "@/lib/quote-utils"
 import { supabase } from "@/lib/supabase"
@@ -16,6 +16,7 @@ export default function SettingsPage() {
   const [editName, setEditName] = useState("")
   const [confirm, setConfirm]   = useState<null | "month" | "all">(null)
   const [apiError, setApiError] = useState("")
+  const [dragOverId, setDragOverId] = useState<string | null>(null)
 
   const [settings, setSettings] = useState<QuoteSettings>({
     habitTime: "21:00", quoteTime: "07:30", quoteCount: 1,
@@ -58,6 +59,30 @@ export default function SettingsPage() {
 
   async function handleDelete(id: string) {
     await deleteHabit(id); load()
+  }
+
+  function handleDragStart(e: React.DragEvent, id: string) {
+    e.dataTransfer.setData("habitId", id)
+  }
+
+  function handleDragOver(e: React.DragEvent, id: string) {
+    e.preventDefault()
+    setDragOverId(id)
+  }
+
+  async function handleDrop(e: React.DragEvent, targetId: string) {
+    e.preventDefault()
+    setDragOverId(null)
+    const draggedId = e.dataTransfer.getData("habitId")
+    if (!draggedId || draggedId === targetId) return
+    const reordered = [...habits]
+    const fromIdx = reordered.findIndex(h => h.id === draggedId)
+    const toIdx   = reordered.findIndex(h => h.id === targetId)
+    if (fromIdx === -1 || toIdx === -1) return
+    const [moved] = reordered.splice(fromIdx, 1)
+    reordered.splice(toIdx, 0, moved)
+    setHabits(reordered)
+    await reorderHabits(reordered.map(h => h.id))
   }
 
   async function handleResetMonth() {
@@ -117,7 +142,15 @@ export default function SettingsPage() {
           ) : (
             habits.map((h, idx) => (
               <div key={h.id}
-                className={`flex items-center gap-3 px-4 py-3 ${idx < habits.length - 1 ? "border-b border-slate-700/25" : ""}`}>
+                draggable={editingId !== h.id}
+                onDragStart={e => handleDragStart(e, h.id)}
+                onDragOver={e => handleDragOver(e, h.id)}
+                onDragLeave={() => setDragOverId(null)}
+                onDrop={e => handleDrop(e, h.id)}
+                className={`flex items-center gap-3 px-4 py-3 transition-colors
+                  ${idx < habits.length - 1 ? "border-b border-slate-700/25" : ""}
+                  ${dragOverId === h.id ? "bg-zinc-800/60" : ""}`}>
+                <span className="text-zinc-600 cursor-grab select-none text-sm">⠿</span>
                 {editingId === h.id ? (
                   <>
                     <input autoFocus value={editName}

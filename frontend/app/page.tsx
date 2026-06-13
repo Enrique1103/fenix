@@ -2,9 +2,9 @@
 
 import { useState, useEffect, useCallback } from "react"
 import { ChevronLeft, ChevronRight, Flame, TrendingUp, TrendingDown } from "lucide-react"
-import { getHabits, getMonthAll, setRecord, getMonthSummary, getMonthMood, setMood } from "@/lib/api"
+import { getHabits, getMonthAll, setRecord, getMonthSummary, getMonthMood, setMood, getStreak } from "@/lib/api"
 import { Habit } from "@/lib/types"
-import { MONTHS, DAYS_SHORT, daysInMonth, firstWeekdayOffset, toISODate, streak } from "@/lib/utils"
+import { MONTHS, DAYS_SHORT, daysInMonth, firstWeekdayOffset, toISODate } from "@/lib/utils"
 import { HabitCell } from "@/components/habit-cell"
 import { MoodEmoji } from "@/components/mood-emoji"
 import { MonthlyEKGChart } from "@/components/monthly-ekg-chart"
@@ -319,8 +319,9 @@ export default function HabitTrackerPage() {
   const [habits, setHabits] = useState<Habit[]>([])
   const [matrix, setMatrix] = useState<RecordMatrix>({})
   const [loading, setLoading] = useState(true)
-  const [prevMonthDone, setPrevMonthDone] = useState(0)
-  const [prevMonthDays, setPrevMonthDays] = useState(0)
+  const [streakData, setStreakData] = useState({ streak_current: 0, streak_best: 0 })
+  const [monthPct, setMonthPct] = useState(0)
+  const [prevMonthPct, setPrevMonthPct] = useState(0)
   const [view, setView] = useState<"weekly" | "monthly">("weekly")
   const [moodMap, setMoodMap] = useState<Record<string, number>>({})
   const [picker, setPicker] = useState<string | null>(null)
@@ -340,10 +341,12 @@ export default function HabitTrackerPage() {
     setLoading(true)
     const prevM = month === 1 ? 12 : month - 1
     const prevY = month === 1 ? year - 1 : year
-    const [h, records, prevSummary, moodData] = await Promise.all([
+    const [h, records, monthRes, prevMonthRes, streakRes, moodData] = await Promise.all([
       getHabits(),
       getMonthAll(year, month),
+      getMonthSummary(year, month),
       getMonthSummary(prevY, prevM),
+      getStreak(),
       getMonthMood(year, month).catch(() => ({} as Record<string, number>)),
     ])
     setHabits(h)
@@ -354,8 +357,9 @@ export default function HabitTrackerPage() {
     }
     setMatrix(m)
     setMoodMap(moodData)
-    setPrevMonthDone(Object.values(prevSummary).reduce((a, b) => a + b, 0))
-    setPrevMonthDays(daysInMonth(prevY, prevM))
+    setMonthPct(monthRes.pct)
+    setPrevMonthPct(prevMonthRes.pct)
+    setStreakData(streakRes)
     setLoading(false)
   }, [year, month])
 
@@ -384,7 +388,12 @@ export default function HabitTrackerPage() {
       else updated[ds][habitId] = next
       return updated
     })
-    try { await setRecord(ds, habitId, next ?? null) } catch { load() }
+    try {
+      await setRecord(ds, habitId, next ?? null)
+    } catch (err) {
+      console.error("Error guardando registro:", err)
+      load()
+    }
   }
 
   function openMoodPicker(date: string, e: React.MouseEvent) {
@@ -402,29 +411,27 @@ export default function HabitTrackerPage() {
       else updated[date] = level
       return updated
     })
-    try { await setMood(date, level) } catch { load() }
+    try {
+      await setMood(date, level)
+    } catch (err) {
+      console.error("Error guardando ánimo:", err)
+      load()
+    }
   }
-
-  // Today's progress
 
   const weeks = getWeeks(year, month)
 
   // ── Insights ──
-  const monthlySummary: Record<string, number> = {}
-  for (const [date, dayRec] of Object.entries(matrix)) {
-    monthlySummary[date] = Object.values(dayRec).filter(v => v === 'done').length
-  }
-  const { current: currentStreak } = streak(monthlySummary, habits.length, year, month)
-  const days = daysInMonth(year, month)
+  const todayDate = new Date()
+  const daysElapsed = (year === todayDate.getFullYear() && month === todayDate.getMonth() + 1)
+    ? todayDate.getDate()
+    : daysInMonth(year, month)
   const habitPcts = habits.map(h => {
     const done = Object.values(matrix).filter(dayRec => dayRec[h.id] === 'done').length
-    return { id: h.id, name: h.name, pct: days > 0 ? Math.round(done / days * 100) : 0 }
+    return { id: h.id, name: h.name, pct: daysElapsed > 0 ? Math.round(done / daysElapsed * 100) : 0 }
   })
   const bestHabit = habitPcts.length > 0 ? habitPcts.reduce((a, b) => a.pct >= b.pct ? a : b) : null
-  const totalDoneMonth = Object.values(monthlySummary).reduce((a, b) => a + b, 0)
-  const currentPct = habits.length * days > 0 ? Math.round(totalDoneMonth / (habits.length * days) * 100) : 0
-  const prevPct = habits.length * prevMonthDays > 0 ? Math.round(prevMonthDone / (habits.length * prevMonthDays) * 100) : 0
-  const diffPct = currentPct - prevPct
+  const diffPct = Math.round(monthPct - prevMonthPct)
 
   return (
     <div className="min-h-screen bg-zinc-950">
@@ -452,11 +459,11 @@ export default function HabitTrackerPage() {
 
           {/* Índice de Resiliencia */}
           <div className={`rounded-lg px-2 py-1.5 flex flex-col gap-0.5
-            ${currentStreak > 0 ? "bg-amber-500/10 border border-amber-500/25" : "bg-zinc-800/50 border border-slate-700/30"}`}>
+            ${streakData.streak_current > 0 ? "bg-amber-500/10 border border-amber-500/25" : "bg-zinc-800/50 border border-slate-700/30"}`}>
             <div className="flex items-center gap-1">
-              <Flame size={11} className={currentStreak > 0 ? "text-amber-400" : "text-zinc-500"}/>
-              <span className={`text-sm font-bold tabular-nums leading-none ${currentStreak > 0 ? "text-amber-400" : "text-zinc-500"}`}>
-                {currentStreak}
+              <Flame size={11} className={streakData.streak_current > 0 ? "text-amber-400" : "text-zinc-500"}/>
+              <span className={`text-sm font-bold tabular-nums leading-none ${streakData.streak_current > 0 ? "text-amber-400" : "text-zinc-500"}`}>
+                {streakData.streak_current}
               </span>
             </div>
             <p className="text-[8px] text-zinc-500 leading-none">Índice Resiliencia</p>

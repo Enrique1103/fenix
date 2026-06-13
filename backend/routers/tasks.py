@@ -44,6 +44,7 @@ def create_task(body: TaskCreate, user_id: str = Depends(get_user_id)):
         "completed": False,
         "user_id": user_id,
         "parent_task_id": body.parent_task_id,
+        "description": body.description,
     }).execute()
     task = res.data[0]
     task["dep_ids"] = []

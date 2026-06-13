@@ -53,6 +53,7 @@ export interface Reminder {
 export interface Task {
   id: number
   title: string
+  description: string | null
   type: "daily" | "weekly" | "monthly"
   deadline: string | null
   completed: boolean

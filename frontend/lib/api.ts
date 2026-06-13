@@ -45,13 +45,17 @@ export const updateHabit = (id: string, data: { name?: string; active?: boolean 
 export const deleteHabit = (id: string): Promise<void> =>
   req(`/habits/${id}`, { method: "DELETE" })
 
+export const reorderHabits = (orderedIds: string[]): Promise<void> =>
+  req("/habits/reorder", { method: "PUT", body: JSON.stringify(orderedIds) })
+
 // ── Records ───────────────────────────────────────────────────────────────────
 
 export const getDayRecords = (date: string): Promise<DayRecords> =>
   req(`/records/day/${date}`)
 
-export const getMonthSummary = (year: number, month: number): Promise<MonthSummary> =>
-  req(`/records/month/${year}/${month}`)
+export const getMonthSummary = (year: number, month: number): Promise<{
+  summary: MonthSummary; pct: number; habit_count: number
+}> => req(`/records/month/${year}/${month}`)
 
 export const getMonthByHabit = (year: number, month: number): Promise<HabitMonthStats> =>
   req(`/records/month/${year}/${month}/habits`)
@@ -68,6 +72,14 @@ export const getWeekdayAvg = (months = 3): Promise<Record<string, number>> =>
 export const getMonthAll = (year: number, month: number): Promise<{ date: string; habit_id: number; state: string }[]> =>
   req(`/records/month-all/${year}/${month}`)
 
+export const getStreak = (): Promise<{ streak_current: number; streak_best: number }> =>
+  req("/records/streak")
+
+export const getDayScore = (date: string): Promise<{
+  habit_count: number; done: number; rest: number; failed: number;
+  is_perfect: boolean; is_rest_day: boolean;
+}> => req(`/records/day-score/${date}`)
+
 export const setRecord = (date: string, habitId: string, state: string | null): Promise<{ state: string | null }> =>
   req("/records/set", {
     method: "POST",
@@ -79,8 +91,6 @@ export const resetMonth = (year: number, month: number): Promise<void> =>
 
 export const resetAll = (): Promise<void> =>
   req("/records/all", { method: "DELETE" })
-
-// ── Tasks ─────────────────────────────────────────────────────────────────────
 
 // ── Goals ─────────────────────────────────────────────────────────────────────
 
@@ -110,10 +120,16 @@ export const getGoalProgress = (goalId: number): Promise<GoalProgress> =>
 export const getTasks = (type?: string): Promise<Task[]> =>
   req(`/tasks${type ? `?type=${type}` : ""}`)
 
-export const createTask = (data: { title: string; type: string; deadline?: string; parent_task_id?: number }): Promise<Task> =>
+export const createTask = (data: {
+  title: string; type: string; deadline?: string;
+  parent_task_id?: number; description?: string
+}): Promise<Task> =>
   req("/tasks", { method: "POST", body: JSON.stringify(data) })
 
-export const updateTask = (id: number, data: { title?: string; completed?: boolean; deadline?: string | null }): Promise<Task> =>
+export const updateTask = (id: number, data: {
+  title?: string; completed?: boolean; deadline?: string | null;
+  description?: string | null
+}): Promise<Task> =>
   req(`/tasks/${id}`, { method: "PATCH", body: JSON.stringify(data) })
 
 export const deleteTask = (id: number): Promise<void> =>
@@ -132,6 +148,22 @@ export const getMonthMood = (year: number, month: number): Promise<Record<string
 
 export const setMood = (date: string, level: number): Promise<{ level: number }> =>
   req("/mood/set", { method: "POST", body: JSON.stringify({ date, level }) })
+
+// ── Achievements ──────────────────────────────────────────────────────────────
+
+export interface AchievementRecord {
+  id: number
+  type: string
+  date: string
+  meta: Record<string, unknown> | null
+  created_at: string
+}
+
+export const getAchievements = (): Promise<AchievementRecord[]> =>
+  req("/achievements")
+
+export const upsertAchievement = (data: { type: string; date: string; meta?: Record<string, unknown> }): Promise<{ ok: boolean }> =>
+  req("/achievements", { method: "POST", body: JSON.stringify(data) })
 
 // ── Reminders ─────────────────────────────────────────────────────────────────
 

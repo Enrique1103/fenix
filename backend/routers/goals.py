@@ -92,7 +92,11 @@ def attach_habit(goal_id: int, habit_id: str, user_id: str = Depends(get_user_id
     db = get_db()
     existing = db.table("goal_habits").select("id").eq("goal_id", goal_id).eq("habit_id", habit_id).execute()
     if not existing.data:
-        db.table("goal_habits").insert({"goal_id": goal_id, "habit_id": habit_id}).execute()
+        db.table("goal_habits").insert({
+            "goal_id": goal_id,
+            "habit_id": habit_id,
+            "linked_at": str(date_type.today()),
+        }).execute()
     return {"ok": True}
 
 
@@ -122,14 +126,13 @@ def goal_progress(goal_id: int, user_id: str = Depends(get_user_id)):
     if not goal:
         return {"pct": 0, "perfect_days": 0, "active_days": 0, "streak_current": 0, "streak_best": 0}
 
-    habit_ids = [
-        r["habit_id"] for r in
-        db.table("goal_habits").select("habit_id").eq("goal_id", goal_id).execute().data
-    ]
-    if not habit_ids:
+    gh_rows = db.table("goal_habits").select("habit_id, linked_at")\
+        .eq("goal_id", goal_id).execute().data
+    if not gh_rows:
         return {"pct": 0, "perfect_days": 0, "active_days": 0, "streak_current": 0, "streak_best": 0}
-
-    start_date = str(goal[0]["created_at"])[:10]
+    habit_ids = [r["habit_id"] for r in gh_rows]
+    linked_dates = [str(r["linked_at"])[:10] for r in gh_rows if r.get("linked_at")]
+    start_date = min(linked_dates) if linked_dates else str(goal[0]["created_at"])[:10]
     today = str(date_type.today())
 
     records = (

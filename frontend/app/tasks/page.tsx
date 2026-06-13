@@ -294,10 +294,11 @@ export default function TasksPage() {
   const completed = roots.filter(t => t.completed)
 
   const today = getToday()
+  const tabTasks = allTasks.filter(t => t.type === tab)
   const sankeyData = {
-    completed: allTasks.filter(t => t.completed).length,
-    overdue:   allTasks.filter(t => !t.completed && !!t.deadline && t.deadline < today).length,
-    pending:   allTasks.filter(t => !t.completed && (!t.deadline || t.deadline >= today)).length,
+    completed: tabTasks.filter(t => t.completed).length,
+    overdue:   tabTasks.filter(t => !t.completed && !!t.deadline && t.deadline < today).length,
+    pending:   tabTasks.filter(t => !t.completed && (!t.deadline || t.deadline >= today)).length,
   }
 
   async function handleAddTask(title: string, deadline: string, parentId?: number) {
@@ -402,7 +403,14 @@ export default function TasksPage() {
           </div>
         ) : view === "graph" ? (
           <>
-            <TaskGraph tasks={roots} allTasks={allTasks} onAddTask={handleAddTask}/>
+            <TaskGraph
+              tasks={roots}
+              allTasks={allTasks}
+              tab={tab}
+              onAddTask={handleAddTask}
+              onConnect={async (taskId, depId) => { await addTaskDep(taskId, depId); await load() }}
+              onDisconnect={async (taskId, depId) => { await removeTaskDep(taskId, depId); await load() }}
+            />
             {roots.length === 0 && (
               <div className="text-center py-12 text-zinc-600">
                 <p className="text-sm">Sin tareas {TABS.find(t => t.key === tab)?.label.toLowerCase()}</p>

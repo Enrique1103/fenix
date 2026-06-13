@@ -1,13 +1,16 @@
+import os
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from routers import habits, records, tasks, goals, reminders, mood
+from routers import habits, records, tasks, goals, reminders, mood, achievements
 
 app = FastAPI(title="Habit Tracker API")
 
+ALLOWED_ORIGINS = os.getenv("ALLOWED_ORIGINS", "http://localhost:3000").split(",")
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=ALLOWED_ORIGINS,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -32,6 +35,7 @@ app.include_router(tasks.router)
 app.include_router(goals.router)
 app.include_router(reminders.router)
 app.include_router(mood.router)
+app.include_router(achievements.router)
 
 
 @app.get("/")

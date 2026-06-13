@@ -4,10 +4,10 @@ import { useEffect, useState } from "react"
 import { ChevronLeft, ChevronRight, Flame } from "lucide-react"
 import {
   getHabits, getMonthSummary, getMonthByHabit,
-  getMonthAll, getWeekdayAvg, getMonthlyTrend, getTasks,
+  getMonthAll, getWeekdayAvg, getMonthlyTrend, getTasks, getStreak,
 } from "@/lib/api"
 import { Habit, Task } from "@/lib/types"
-import { MONTHS, daysInMonth, streak } from "@/lib/utils"
+import { MONTHS, daysInMonth } from "@/lib/utils"
 import { TrendChart } from "@/components/trend-chart"
 import { WeekdayChart } from "@/components/weekday-chart"
 import { MonthlyEKGChart } from "@/components/monthly-ekg-chart"
@@ -44,17 +44,20 @@ export default function StatsPage() {
 
   const [habits, setHabits]           = useState<Habit[]>([])
   const [summary, setSummary]         = useState<Record<string, number>>({})
+  const [monthPct, setMonthPct]       = useState(0)
   const [habitStats, setHabitStats]   = useState<Record<string, number>>({})
   const [weekdayAvg, setWeekdayAvg]   = useState<Record<string, number>>({})
   const [matrix, setMatrix]           = useState<RecordMatrix>({})
   const [monthlyTrend, setMonthlyTrend] = useState<{ label: string; pct: number }[]>([])
   const [tasks, setTasks]             = useState<Task[]>([])
+  const [streakData, setStreakData]   = useState({ streak_current: 0, streak_best: 0 })
   const [loading, setLoading]         = useState(true)
 
   // Carga global — una sola vez
   useEffect(() => {
     getMonthlyTrend().then(setMonthlyTrend)
     getTasks().then(setTasks)
+    getStreak().then(setStreakData)
   }, [])
 
   // Carga mensual — se actualiza al cambiar mes
@@ -66,9 +69,10 @@ export default function StatsPage() {
       getMonthByHabit(year, month),
       getWeekdayAvg(3),
       getMonthAll(year, month),
-    ]).then(([h, s, hs, wd, monthAll]) => {
+    ]).then(([h, monthRes, hs, wd, monthAll]) => {
       setHabits(h)
-      setSummary(s)
+      setSummary(monthRes.summary)
+      setMonthPct(monthRes.pct)
       setHabitStats(hs)
       setWeekdayAvg(wd)
       const m: RecordMatrix = {}
@@ -87,10 +91,8 @@ export default function StatsPage() {
   // ── Métricas ──
   const days        = daysInMonth(year, month)
   const total       = habits.length
-  const totalDone   = Object.values(summary).reduce((a, b) => a + b, 0)
-  const maxPossible = total * days
-  const monthPct    = maxPossible ? Math.round(totalDone / maxPossible * 100) : 0
-  const { current: currentStreak, best: bestStreak } = streak(summary, total, year, month)
+  const currentStreak = streakData.streak_current
+  const bestStreak    = streakData.streak_best
   const perfectDays = total > 0 ? Object.values(summary).filter(c => c >= total).length : 0
 
   const habitPcts  = habits.map(h => ({ name: h.name, pct: days ? Math.round((habitStats[h.id] ?? 0) / days * 100) : 0 }))

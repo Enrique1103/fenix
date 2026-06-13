@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { Bell, Flame, Star, Trophy, CheckCircle2, AlertTriangle } from "lucide-react"
-import { getHabits, getDayRecords, getWeeklyTrend, getTasks } from "@/lib/api"
+import { getHabits, getDayRecords, getWeeklyTrend, getTasks, getAchievements, upsertAchievement } from "@/lib/api"
 import { Habit, DayRecords } from "@/lib/types"
 
 function getToday() {
@@ -16,9 +16,12 @@ interface Achievement {
   bg: string
   title: string
   sub: string
+  type: string
+  date: string
+  meta?: Record<string, unknown>
 }
 
-async function detectAchievements(): Promise<Achievement[]> {
+async function detectTodayAchievements(): Promise<Achievement[]> {
   const [habits, trend, tasks] = await Promise.all([
     getHabits(),
     getWeeklyTrend(),
@@ -38,6 +41,9 @@ async function detectAchievements(): Promise<Achievement[]> {
     if (allDone) {
       list.push({
         id: `perfect_day_${today}`,
+        type: "perfect_day",
+        date: today,
+        meta: { habit_count: active.length },
         Icon: Star,
         color: "text-green-400",
         bg: "bg-green-500/10",
@@ -53,6 +59,9 @@ async function detectAchievements(): Promise<Achievement[]> {
     if (best.pct >= 80) {
       list.push({
         id: `best_week_${best.week_start}`,
+        type: "best_week",
+        date: best.week_start,
+        meta: { pct: best.pct },
         Icon: Flame,
         color: "text-orange-400",
         bg: "bg-orange-500/10",
@@ -65,6 +74,9 @@ async function detectAchievements(): Promise<Achievement[]> {
     if (lastFull.length >= 2) {
       list.push({
         id: `two_perfect_weeks`,
+        type: "two_perfect_weeks",
+        date: today,
+        meta: { count: lastFull.length },
         Icon: Trophy,
         color: "text-yellow-400",
         bg: "bg-yellow-500/10",
@@ -75,13 +87,15 @@ async function detectAchievements(): Promise<Achievement[]> {
   }
 
   // ── Tareas al día ─────────────────────────────────────────────────────────
-  const today2 = getToday()
-  const overdue = tasks.filter(t => !t.completed && !!t.deadline && t.deadline < today2)
+  const overdue   = tasks.filter(t => !t.completed && !!t.deadline && t.deadline < today)
   const completed = tasks.filter(t => t.completed)
 
   if (overdue.length === 0 && tasks.length > 0) {
     list.push({
       id: `tasks_uptodate_${today}`,
+      type: "tasks_uptodate",
+      date: today,
+      meta: { completed: completed.length },
       Icon: CheckCircle2,
       color: "text-blue-400",
       bg: "bg-blue-500/10",
@@ -91,6 +105,9 @@ async function detectAchievements(): Promise<Achievement[]> {
   } else if (overdue.length > 0) {
     list.push({
       id: `tasks_overdue_${today}`,
+      type: "tasks_overdue",
+      date: today,
+      meta: { overdue: overdue.length },
       Icon: AlertTriangle,
       color: "text-red-400",
       bg: "bg-red-500/10",
@@ -102,14 +119,86 @@ async function detectAchievements(): Promise<Achievement[]> {
   return list
 }
 
+function iconForType(type: string): React.ElementType {
+  const map: Record<string, React.ElementType> = {
+    perfect_day:       Star,
+    best_week:         Flame,
+    two_perfect_weeks: Trophy,
+    tasks_uptodate:    CheckCircle2,
+    tasks_overdue:     AlertTriangle,
+  }
+  return map[type] ?? Bell
+}
+
+function styleForType(type: string): { color: string; bg: string } {
+  const map: Record<string, { color: string; bg: string }> = {
+    perfect_day:       { color: "text-green-400",  bg: "bg-green-500/10"  },
+    best_week:         { color: "text-orange-400", bg: "bg-orange-500/10" },
+    two_perfect_weeks: { color: "text-yellow-400", bg: "bg-yellow-500/10" },
+    tasks_uptodate:    { color: "text-blue-400",   bg: "bg-blue-500/10"   },
+    tasks_overdue:     { color: "text-red-400",    bg: "bg-red-500/10"    },
+  }
+  return map[type] ?? { color: "text-zinc-400", bg: "bg-zinc-800" }
+}
+
+function labelForRecord(type: string, meta: Record<string, unknown> | null): { title: string; sub: string } {
+  switch (type) {
+    case "perfect_day":
+      return { title: "Día perfecto", sub: `Completaste los ${meta?.habit_count ?? "?"} hábitos del día.` }
+    case "best_week":
+      return { title: `Semana de ${meta?.pct ?? "?"}%`, sub: "Tu mejor semana reciente." }
+    case "two_perfect_weeks":
+      return { title: "Dos semanas perfectas", sub: `${meta?.count ?? "?"} semanas al 100%.` }
+    case "tasks_uptodate":
+      return { title: "Tareas al día", sub: `${meta?.completed ?? "?"} tareas completadas, sin vencidas.` }
+    case "tasks_overdue":
+      return { title: `${meta?.overdue ?? "?"} tarea(s) vencida(s)`, sub: "Hay tareas con deadline pasado." }
+    default:
+      return { title: type, sub: "" }
+  }
+}
+
 export default function NotificationsPage() {
   const [items,   setItems]   = useState<Achievement[]>([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    detectAchievements()
-      .then(setItems)
-      .finally(() => setLoading(false))
+    const today = getToday()
+
+    async function load() {
+      // 1. Detectar logros de hoy y persistirlos
+      const todayAchievements = await detectTodayAchievements()
+      await Promise.all(
+        todayAchievements.map(a =>
+          upsertAchievement({ type: a.type, date: a.date, meta: a.meta }).catch(() => {})
+        )
+      )
+
+      // 2. Cargar historial desde backend (últimos 30 días)
+      const records = await getAchievements()
+
+      // 3. Combinar: mostrar logros de hoy primero (fresh), luego histórico sin duplicar
+      const todayIds = new Set(todayAchievements.map(a => `${a.type}_${a.date}`))
+      const historicItems: Achievement[] = records
+        .filter(r => !todayIds.has(`${r.type}_${r.date}`))
+        .map(r => {
+          const { color, bg } = styleForType(r.type)
+          const { title, sub } = labelForRecord(r.type, r.meta)
+          return {
+            id: `${r.type}_${r.date}_${r.id}`,
+            type: r.type,
+            date: r.date,
+            Icon: iconForType(r.type),
+            color, bg, title,
+            sub: r.date !== today ? `${r.date} · ${sub}` : sub,
+          }
+        })
+
+      setItems([...todayAchievements, ...historicItems])
+      setLoading(false)
+    }
+
+    load()
   }, [])
 
   return (
