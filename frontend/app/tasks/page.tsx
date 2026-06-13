@@ -294,7 +294,6 @@ export default function TasksPage() {
   const completed = roots.filter(t => t.completed)
 
   const today = getToday()
-  const tabTasks = allTasks.filter(t => t.type === tab)
   const sankeyData = {
     completed: tabTasks.filter(t => t.completed).length,
     overdue:   tabTasks.filter(t => !t.completed && !!t.deadline && t.deadline < today).length,
