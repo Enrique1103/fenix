@@ -23,9 +23,9 @@ export default function CalendarPage() {
 
   useEffect(() => {
     setLoading(true)
-    Promise.all([getHabits(), getMonthSummary(year, month)]).then(([h, s]) => {
+    Promise.all([getHabits(), getMonthSummary(year, month)]).then(([h, monthRes]) => {
       setHabits(h)
-      setSummary(s)
+      setSummary(monthRes.summary)
       setLoading(false)
     })
   }, [year, month])
