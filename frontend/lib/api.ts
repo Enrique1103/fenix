@@ -1,4 +1,4 @@
-import { Habit, DayRecords, MonthSummary, HabitMonthStats, Task, Goal, GoalProgress, Reminder } from "./types"
+import { Habit, DayRecords, MonthSummary, HabitMonthStats, Task, Goal, GoalProgress, Reminder, RoutineTemplate, RoutineBlock, RoutineDayBlock, RoutineCategory, RoutineDayView } from "./types"
 import { supabase } from "./supabase"
 
 const BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000"
@@ -197,6 +197,62 @@ export const getAchievements = (): Promise<AchievementRecord[]> =>
 
 export const upsertAchievement = (data: { type: string; date: string; meta?: Record<string, unknown> }): Promise<{ ok: boolean }> =>
   req("/achievements", { method: "POST", body: JSON.stringify(data) })
+
+// ── Rutina ────────────────────────────────────────────────────────────────────
+
+export const getTemplates = (): Promise<RoutineTemplate[]> =>
+  req("/routine/templates")
+
+export const createTemplate = (data: { name: string; color?: string }): Promise<RoutineTemplate> =>
+  req("/routine/templates", { method: "POST", body: JSON.stringify(data) })
+
+export const updateTemplate = (id: number, data: { name?: string; color?: string }): Promise<RoutineTemplate> =>
+  req(`/routine/templates/${id}`, { method: "PATCH", body: JSON.stringify(data) })
+
+export const deleteTemplate = (id: number): Promise<void> =>
+  req(`/routine/templates/${id}`, { method: "DELETE" })
+
+export const getTemplateBlocks = (tid: number): Promise<RoutineBlock[]> =>
+  req(`/routine/templates/${tid}/blocks`)
+
+export const createBlock = (data: Omit<RoutineBlock, "id" | "completed">): Promise<RoutineBlock> =>
+  req("/routine/blocks", { method: "POST", body: JSON.stringify(data) })
+
+export const updateBlock = (id: number, data: Partial<Omit<RoutineBlock, "id" | "template_id">>): Promise<RoutineBlock> =>
+  req(`/routine/blocks/${id}`, { method: "PATCH", body: JSON.stringify(data) })
+
+export const deleteBlock = (id: number): Promise<void> =>
+  req(`/routine/blocks/${id}`, { method: "DELETE" })
+
+export const reorderBlocks = (tid: number, orderedIds: number[]): Promise<void> =>
+  req(`/routine/templates/${tid}/blocks/reorder`, { method: "PUT", body: JSON.stringify(orderedIds) })
+
+export const getCategories = (): Promise<RoutineCategory[]> =>
+  req("/routine/categories")
+
+export const createCategory = (data: { label: string; color: string }): Promise<RoutineCategory> =>
+  req("/routine/categories", { method: "POST", body: JSON.stringify(data) })
+
+export const deleteCategory = (id: number): Promise<void> =>
+  req(`/routine/categories/${id}`, { method: "DELETE" })
+
+export const getDayView = (date: string): Promise<RoutineDayView> =>
+  req(`/routine/day/${date}`)
+
+export const setDayOverride = (date: string, templateId: number | null): Promise<void> =>
+  req("/routine/day/override", { method: "POST", body: JSON.stringify({ date, template_id: templateId }) })
+
+export const createDayBlock = (data: Omit<RoutineDayBlock, "id" | "completed">): Promise<RoutineDayBlock> =>
+  req("/routine/day/blocks", { method: "POST", body: JSON.stringify(data) })
+
+export const updateDayBlock = (id: number, data: Partial<RoutineDayBlock>): Promise<RoutineDayBlock> =>
+  req(`/routine/day/blocks/${id}`, { method: "PATCH", body: JSON.stringify(data) })
+
+export const deleteDayBlock = (id: number): Promise<void> =>
+  req(`/routine/day/blocks/${id}`, { method: "DELETE" })
+
+export const completeBlock = (blockId: number, date: string, completed: boolean): Promise<{ ok: boolean }> =>
+  req("/routine/complete", { method: "POST", body: JSON.stringify({ block_id: blockId, date, completed }) })
 
 // ── Reminders ─────────────────────────────────────────────────────────────────
 

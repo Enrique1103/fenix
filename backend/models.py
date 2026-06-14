@@ -31,3 +31,72 @@ class TaskUpdate(BaseModel):
     completed: Optional[bool] = None
     deadline: Optional[str] = None
     description: Optional[str] = None
+
+
+# ── Rutina ────────────────────────────────────────────────────────────────────
+
+class TemplateCreate(BaseModel):
+    name: str
+    color: Optional[str] = "#22c55e"
+
+class TemplateUpdate(BaseModel):
+    name: Optional[str] = None
+    color: Optional[str] = None
+
+class BlockCreate(BaseModel):
+    template_id: int
+    title: str
+    start_time: str
+    end_time: str
+    category: str
+    category_label: str
+    category_color: str = "#6366f1"
+    habit_id: Optional[str] = None
+    notes: Optional[str] = None
+    ord: int = 0
+
+class BlockUpdate(BaseModel):
+    title: Optional[str] = None
+    start_time: Optional[str] = None
+    end_time: Optional[str] = None
+    category: Optional[str] = None
+    category_label: Optional[str] = None
+    category_color: Optional[str] = None
+    habit_id: Optional[str] = None
+    notes: Optional[str] = None
+    ord: Optional[int] = None
+
+class CategoryCreate(BaseModel):
+    label: str
+    color: str
+
+class DayBlockCreate(BaseModel):
+    date: str
+    title: str
+    start_time: str
+    end_time: str
+    category: str
+    category_label: str
+    category_color: str = "#6366f1"
+    habit_id: Optional[str] = None
+    notes: Optional[str] = None
+
+class DayBlockUpdate(BaseModel):
+    title: Optional[str] = None
+    start_time: Optional[str] = None
+    end_time: Optional[str] = None
+    category: Optional[str] = None
+    category_label: Optional[str] = None
+    category_color: Optional[str] = None
+    habit_id: Optional[str] = None
+    notes: Optional[str] = None
+    completed: Optional[bool] = None
+
+class BlockCompletion(BaseModel):
+    block_id: int
+    date: str
+    completed: bool
+
+class DayOverride(BaseModel):
+    date: str
+    template_id: Optional[int] = None

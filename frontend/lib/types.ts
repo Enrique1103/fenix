@@ -61,3 +61,54 @@ export interface Task {
   parent_task_id: number | null
   dep_ids: number[]
 }
+
+// ── Rutina ────────────────────────────────────────────────────────────────────
+
+export interface RoutineTemplate {
+  id: number
+  name: string
+  color: string
+  created_at: string
+}
+
+export interface RoutineBlock {
+  id: number
+  template_id: number
+  title: string
+  start_time: string
+  end_time: string
+  category: string
+  category_label: string
+  category_color: string
+  habit_id: string | null
+  notes: string | null
+  ord: number
+  completed?: boolean
+}
+
+export interface RoutineDayBlock {
+  id: number
+  date: string
+  title: string
+  start_time: string
+  end_time: string
+  category: string
+  category_label: string
+  category_color: string
+  habit_id: string | null
+  notes: string | null
+  completed: boolean
+}
+
+export interface RoutineCategory {
+  id: number
+  label: string
+  color: string
+}
+
+export interface RoutineDayView {
+  template: RoutineTemplate | null
+  template_blocks: (RoutineBlock & { completed: boolean })[]
+  day_blocks: RoutineDayBlock[]
+  habits: { id: string; name: string; state: string | null }[]
+}
