@@ -403,7 +403,7 @@ export default function TasksPage() {
         ) : view === "graph" ? (
           <>
             <TaskGraph
-              tasks={roots}
+              tasks={tabTasks}
               allTasks={allTasks}
               tab={tab}
               onAddTask={handleAddTask}

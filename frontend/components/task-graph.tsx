@@ -2,13 +2,13 @@
 
 import { useState, useEffect, useRef, useMemo } from "react"
 import { Task } from "@/lib/types"
-import { X, Lock } from "lucide-react"
+import { X } from "lucide-react"
 
-const NODE_W         = 230
-const NODE_H         = 72
-const COL_GAP        = 96
-const ROW_GAP        = 16
-const PAD            = 24
+const NODE_W         = 200
+const NODE_H         = 64
+const H_GAP          = 40
+const V_GAP          = 72
+const PAD            = 32
 const DRAG_THRESHOLD = 5
 
 function getToday() {
@@ -28,7 +28,7 @@ function isBlocked(task: Task, all: Task[]) {
 }
 
 function wrapTitle(title: string): [string, string | null] {
-  const MAX = 22
+  const MAX = 20
   if (title.length <= MAX) return [title, null]
   const brk = title.lastIndexOf(" ", MAX)
   if (brk <= 4) return [title.slice(0, MAX - 1) + "…", null]
@@ -36,44 +36,45 @@ function wrapTitle(title: string): [string, string | null] {
   return [title.slice(0, brk), rest.length > MAX ? rest.slice(0, MAX - 1) + "…" : rest]
 }
 
+// Top-down org chart layout using parent_task_id
 function computeLayout(tasks: Task[]): Map<number, { x: number; y: number }> {
-  const ids  = new Set(tasks.map(t => t.id))
-  const deps = new Map(tasks.map(t => [t.id, t.dep_ids.filter(d => ids.has(d))]))
-  const level = new Map<number, number>()
+  if (tasks.length === 0) return new Map()
 
-  function lvl(id: number, stack = new Set<number>()): number {
-    if (level.has(id)) return level.get(id)!
-    if (stack.has(id)) return 0
-    stack.add(id)
-    const d = deps.get(id) ?? []
-    const l = d.length === 0 ? 0 : Math.max(...d.map(dep => lvl(dep, stack) + 1))
-    level.set(id, l)
-    return l
-  }
-  tasks.forEach(t => lvl(t.id))
+  const ids = new Set(tasks.map(t => t.id))
 
-  const cols = new Map<number, number[]>()
-  level.forEach((l, id) => {
-    if (!cols.has(l)) cols.set(l, [])
-    cols.get(l)!.push(id)
+  // Build children map
+  const children = new Map<number | null, Task[]>()
+  children.set(null, [])
+  tasks.forEach(t => {
+    const pid = t.parent_task_id !== null && ids.has(t.parent_task_id) ? t.parent_task_id : null
+    if (!children.has(pid)) children.set(pid, [])
+    children.get(pid)!.push(t)
   })
 
-  const hasDeps = tasks.some(t => t.dep_ids.filter(d => ids.has(d)).length > 0)
-  if (!hasDeps && tasks.length > 1) {
-    const positions = new Map<number, { x: number; y: number }>()
-    tasks.forEach((t, i) => {
-      positions.set(t.id, { x: PAD + i * (NODE_W + COL_GAP), y: PAD })
-    })
-    return positions
+  // Minimum subtree width for a node
+  function subtreeW(id: number): number {
+    const kids = children.get(id) ?? []
+    if (kids.length === 0) return NODE_W + H_GAP
+    return Math.max(NODE_W + H_GAP, kids.reduce((s, k) => s + subtreeW(k.id), 0))
   }
 
   const positions = new Map<number, { x: number; y: number }>()
-  cols.forEach((colIds, col) => {
-    const x = PAD + col * (NODE_W + COL_GAP)
-    colIds.forEach((id, row) => {
-      positions.set(id, { x, y: PAD + row * (NODE_H + ROW_GAP) })
+
+  function place(parentId: number | null, startX: number, depth: number) {
+    const kids = children.get(parentId) ?? []
+    let cx = startX
+    kids.forEach(k => {
+      const w = subtreeW(k.id)
+      positions.set(k.id, {
+        x: cx + (w - NODE_W) / 2,
+        y: PAD + depth * (NODE_H + V_GAP),
+      })
+      place(k.id, cx, depth + 1)
+      cx += w
     })
-  })
+  }
+
+  place(null, PAD, 0)
   return positions
 }
 
@@ -149,31 +150,26 @@ function AddSubModal({ parent, onAdd, onClose }: {
 
 // ── Node ─────────────────────────────────────────────────────────────────────
 
-function GraphNode({ task, p, allTasks, isSelected, connectingFromId, onPointerDown, onAddClick, onConnectClick, today }: {
+function GraphNode({ task, p, allTasks, isSelected, onPointerDown, onAddClick, today }: {
   task: Task
   p: { x: number; y: number }
   allTasks: Task[]
   isSelected: boolean
-  connectingFromId: number | null
   onPointerDown: (e: React.PointerEvent<SVGRectElement>) => void
   onAddClick: () => void
-  onConnectClick: () => void
   today: string
 }) {
-  const blocked           = isBlocked(task, allTasks)
-  const overdue           = !task.completed && !!task.deadline && task.deadline < today
-  const isSource          = connectingFromId === task.id
-  const isTarget          = connectingFromId !== null && connectingFromId !== task.id
+  const blocked = isBlocked(task, allTasks)
+  const overdue = !task.completed && !!task.deadline && task.deadline < today
 
-  const border = isSelected ? "#4ade80" : isSource ? "#60a5fa" : task.completed ? "#22c55e" : blocked ? "#3f3f46" : overdue ? "#ef444480" : "#52525b"
-  const bg     = isSelected ? "rgba(74,222,128,0.06)" : isSource ? "rgba(96,165,250,0.1)" : isTarget ? "rgba(96,165,250,0.04)" : task.completed ? "rgba(34,197,94,0.07)" : blocked ? "rgba(24,24,27,0.55)" : overdue ? "rgba(239,68,68,0.05)" : "rgba(39,39,42,0.75)"
+  const border = isSelected ? "#4ade80" : task.completed ? "#22c55e" : blocked ? "#3f3f46" : overdue ? "#ef444480" : "#52525b"
+  const bg     = isSelected ? "rgba(74,222,128,0.08)" : task.completed ? "rgba(34,197,94,0.07)" : blocked ? "rgba(24,24,27,0.55)" : overdue ? "rgba(239,68,68,0.05)" : "rgba(39,39,42,0.75)"
   const textCol = task.completed ? "#71717a" : blocked ? "#52525b" : "#e4e4e7"
   const dotCol  = task.completed ? "#22c55e" : blocked ? "#3f3f46" : overdue ? "#ef4444" : "#71717a"
 
   const [line1, line2] = wrapTitle(task.title)
   const hasLine2 = !!line2
-  const subs     = allTasks.filter(t => t.parent_task_id === task.id).length
-  const hasMeta  = !!task.deadline || subs > 0
+  const hasMeta  = !!task.deadline
 
   const center = p.y + NODE_H / 2
   let t1y: number, t2y: number | null = null, my: number | null = null
@@ -183,21 +179,13 @@ function GraphNode({ task, p, allTasks, isSelected, connectingFromId, onPointerD
   else                            { t1y = center - 15; t2y = center - 1; my = center + 15 }
 
   const noEvt: React.CSSProperties = { pointerEvents: "none" }
-  const strokeW = isSelected || isSource ? "2" : "1.5"
 
   return (
     <g>
-      {/* Glow ring for connect target */}
-      {isTarget && (
-        <rect x={p.x - 3} y={p.y - 3} width={NODE_W + 6} height={NODE_H + 6} rx="13"
-          fill="none" stroke="#60a5fa" strokeWidth="1.5" strokeDasharray="4 3" style={noEvt}/>
-      )}
-
-      {/* Card */}
       <rect x={p.x} y={p.y} width={NODE_W} height={NODE_H} rx="10"
-        fill={bg} stroke={border} strokeWidth={strokeW}
+        fill={bg} stroke={border} strokeWidth={isSelected ? "2" : "1.5"}
         onPointerDown={onPointerDown}
-        style={{ cursor: isTarget ? "crosshair" : "grab" }}
+        style={{ cursor: "grab" }}
       />
 
       {/* Status dot */}
@@ -205,17 +193,14 @@ function GraphNode({ task, p, allTasks, isSelected, connectingFromId, onPointerD
       {task.completed && (
         <text x={p.x + 14} y={center + 4} textAnchor="middle" fontSize="7" fill="#000" fontWeight="bold" style={noEvt}>✓</text>
       )}
-      {blocked && !task.completed && (
-        <text x={p.x + 14} y={center + 3} textAnchor="middle" fontSize="8" fill="#52525b" style={noEvt}>🔒</text>
-      )}
 
       {/* Title lines */}
-      <text x={p.x + 26} y={t1y} fontSize="11.5" fontWeight="500" fill={textCol}
+      <text x={p.x + 26} y={t1y} fontSize="11" fontWeight="500" fill={textCol}
         style={{ textDecoration: task.completed ? "line-through" : "none", pointerEvents: "none" }}>
         {line1}
       </text>
       {hasLine2 && t2y !== null && (
-        <text x={p.x + 26} y={t2y} fontSize="11.5" fontWeight="500" fill={textCol}
+        <text x={p.x + 26} y={t2y} fontSize="11" fontWeight="500" fill={textCol}
           style={{ textDecoration: task.completed ? "line-through" : "none", pointerEvents: "none" }}>
           {line2}
         </text>
@@ -223,46 +208,27 @@ function GraphNode({ task, p, allTasks, isSelected, connectingFromId, onPointerD
       {hasMeta && my !== null && (
         <text x={p.x + 26} y={my} fontSize="9" fill={overdue ? "#f87171" : "#71717a"} style={noEvt}>
           {task.deadline ? fmt(task.deadline) : ""}
-          {task.deadline && subs > 0 ? "  ·  " : ""}
-          {subs > 0 ? `${subs} paso${subs > 1 ? "s" : ""}` : ""}
         </text>
       )}
 
-      {/* Buttons — hidden in connect-target mode */}
-      {!isTarget && (
-        <>
-          {/* "+" subtask */}
-          <g onClick={e => { e.stopPropagation(); onAddClick() }} onPointerDown={e => e.stopPropagation()} style={{ cursor: "pointer" }}>
-            <circle cx={p.x + NODE_W - 14} cy={p.y + 14} r="11" fill="#18181b" stroke="#3f3f46" strokeWidth="1.5"/>
-            <text x={p.x + NODE_W - 14} y={p.y + 19} textAnchor="middle" fontSize="15" fill="#52525b" fontWeight="300">+</text>
-          </g>
-          {/* "→" connect */}
-          {!task.completed && (
-            <g onClick={e => { e.stopPropagation(); onConnectClick() }} onPointerDown={e => e.stopPropagation()} style={{ cursor: "pointer" }}>
-              <circle cx={p.x + NODE_W - 14} cy={p.y + NODE_H - 14} r="11" fill="#18181b"
-                stroke={isSource ? "#60a5fa" : "#3f3f46"} strokeWidth="1.5"/>
-              <text x={p.x + NODE_W - 14} y={p.y + NODE_H - 9} textAnchor="middle" fontSize="12"
-                fill={isSource ? "#60a5fa" : "#3f3f46"}>→</text>
-            </g>
-          )}
-        </>
-      )}
+      {/* "+" subtask button */}
+      <g onClick={e => { e.stopPropagation(); onAddClick() }} onPointerDown={e => e.stopPropagation()} style={{ cursor: "pointer" }}>
+        <circle cx={p.x + NODE_W - 12} cy={p.y + 12} r="10" fill="#18181b" stroke="#3f3f46" strokeWidth="1.5"/>
+        <text x={p.x + NODE_W - 12} y={p.y + 17} textAnchor="middle" fontSize="14" fill="#52525b" fontWeight="300">+</text>
+      </g>
     </g>
   )
 }
 
 // ── GraphCanvas ───────────────────────────────────────────────────────────────
 
-function GraphCanvas({ tasks, allTasks, storageKey, selectedNodeId, connectingFromId, onNodeSelect, onAddSubtask, onConnectStart, onConnectComplete }: {
+function GraphCanvas({ tasks, allTasks, storageKey, selectedNodeId, onNodeSelect, onAddSubtask }: {
   tasks: Task[]
   allTasks: Task[]
   storageKey: string
   selectedNodeId: number | null
-  connectingFromId: number | null
   onNodeSelect: (task: Task) => void
   onAddSubtask: (task: Task) => void
-  onConnectStart: (taskId: number) => void
-  onConnectComplete: (targetId: number) => void
 }) {
   const taskKey  = useMemo(() => tasks.map(t => t.id).sort().join("-"), [tasks])
   const tasksRef = useRef(tasks)
@@ -291,12 +257,12 @@ function GraphCanvas({ tasks, allTasks, storageKey, selectedNodeId, connectingFr
 
   if (tasks.length === 0) return null
 
-  const today  = getToday()
-  const idSet  = new Set(tasks.map(t => t.id))
-  const xs     = [...positions.values()].map(p => p.x)
-  const ys     = [...positions.values()].map(p => p.y)
-  const svgW   = Math.max(460, Math.max(...xs) + NODE_W + PAD * 2)
-  const svgH   = Math.max(120, Math.max(...ys) + NODE_H + PAD * 2)
+  const today = getToday()
+  const ids   = new Set(tasks.map(t => t.id))
+  const xs    = [...positions.values()].map(p => p.x)
+  const ys    = [...positions.values()].map(p => p.y)
+  const svgW  = Math.max(460, Math.max(...xs) + NODE_W + PAD * 2)
+  const svgH  = Math.max(160, Math.max(...ys) + NODE_H + PAD * 2)
 
   function onNodePointerDown(e: React.PointerEvent<SVGRectElement>, taskId: number) {
     e.preventDefault()
@@ -338,82 +304,76 @@ function GraphCanvas({ tasks, allTasks, storageKey, selectedNodeId, connectingFr
     if (d === null) return
     const task = tasks.find(t => t.id === d.id)
     if (!task) return
-
-    if (connectingFromId !== null && connectingFromId !== task.id) {
-      onConnectComplete(task.id)
-    } else {
-      onNodeSelect(task)
-    }
+    onNodeSelect(task)
   }
 
   return (
     <svg
       ref={svgRef}
       width={svgW} height={svgH}
-      style={{
-        display: "block", minWidth: svgW,
-        cursor: isDragging ? "grabbing" : connectingFromId !== null ? "crosshair" : "default",
-      }}
+      style={{ display: "block", minWidth: svgW, cursor: isDragging ? "grabbing" : "default" }}
       onPointerMove={onSvgPointerMove}
       onPointerUp={onSvgPointerUp}
     >
       <defs>
-        <marker id="tip"       markerWidth="7" markerHeight="7" refX="5.5" refY="3.5" orient="auto">
+        <marker id="tip" markerWidth="7" markerHeight="7" refX="5.5" refY="3.5" orient="auto">
           <path d="M0,1 L0,6 L6,3.5 z" fill="#52525b"/>
         </marker>
-        <marker id="tip-done"  markerWidth="7" markerHeight="7" refX="5.5" refY="3.5" orient="auto">
-          <path d="M0,1 L0,6 L6,3.5 z" fill="#22c55e60"/>
-        </marker>
-        <marker id="tip-chain" markerWidth="7" markerHeight="7" refX="5.5" refY="3.5" orient="auto">
-          <path d="M0,1 L0,6 L6,3.5 z" fill="#3f3f46"/>
+        <marker id="tip-done" markerWidth="7" markerHeight="7" refX="5.5" refY="3.5" orient="auto">
+          <path d="M0,1 L0,6 L6,3.5 z" fill="#22c55e50"/>
         </marker>
       </defs>
 
-      {/* Dependency edges */}
+      {/* Parent → child edges (top-down) */}
+      {tasks.map(task => {
+        const pid = task.parent_task_id
+        if (!pid || !ids.has(pid)) return null
+        const from = positions.get(pid)
+        const to   = positions.get(task.id)
+        if (!from || !to) return null
+        const x1 = from.x + NODE_W / 2
+        const y1 = from.y + NODE_H
+        const x2 = to.x + NODE_W / 2
+        const y2 = to.y
+        const my = (y1 + y2) / 2
+        const done = tasks.find(t => t.id === pid)?.completed
+        return (
+          <path key={`edge-${task.id}`}
+            d={`M ${x1} ${y1} C ${x1} ${my} ${x2} ${my} ${x2} ${y2}`}
+            stroke={done ? "#22c55e50" : "#3f3f46"}
+            strokeWidth="1.5"
+            fill="none"
+            markerEnd={done ? "url(#tip-done)" : "url(#tip)"}
+            style={{ pointerEvents: "none" }}
+          />
+        )
+      })}
+
+      {/* dep_ids edges (dashed, horizontal-ish) */}
       {tasks.flatMap(task =>
         task.dep_ids
-          .filter(depId => idSet.has(depId))
+          .filter(depId => ids.has(depId) && tasks.find(t => t.id === depId)?.parent_task_id === task.parent_task_id)
           .map(depId => {
             const from = positions.get(depId)
             const to   = positions.get(task.id)
             if (!from || !to) return null
-            const x1 = from.x + NODE_W, y1 = from.y + NODE_H / 2
-            const x2 = to.x,            y2 = to.y   + NODE_H / 2
+            const x1 = from.x + NODE_W
+            const y1 = from.y + NODE_H / 2
+            const x2 = to.x
+            const y2 = to.y + NODE_H / 2
             const mx = (x1 + x2) / 2
             const depDone = tasks.find(t => t.id === depId)?.completed
             return (
-              <path key={`${depId}-${task.id}`}
+              <path key={`dep-${depId}-${task.id}`}
                 d={`M ${x1} ${y1} C ${mx} ${y1} ${mx} ${y2} ${x2} ${y2}`}
-                stroke={depDone ? "#22c55e50" : "#3f3f46"}
-                strokeWidth="1.5" strokeDasharray={depDone ? undefined : "5 3"}
+                stroke={depDone ? "#22c55e40" : "#a855f730"}
+                strokeWidth="1.5" strokeDasharray="5 3"
                 fill="none" markerEnd={depDone ? "url(#tip-done)" : "url(#tip)"}
                 style={{ pointerEvents: "none" }}
               />
             )
           })
       )}
-
-      {/* Sequential chain when no explicit deps */}
-      {(() => {
-        const hasDeps = tasks.some(t => t.dep_ids.filter(d => idSet.has(d)).length > 0)
-        if (hasDeps) return null
-        return tasks.slice(0, -1).map((task, i) => {
-          const from = positions.get(task.id)
-          const to   = positions.get(tasks[i + 1].id)
-          if (!from || !to) return null
-          const x1 = from.x + NODE_W, y1 = from.y + NODE_H / 2
-          const x2 = to.x,            y2 = to.y   + NODE_H / 2
-          const mx = (x1 + x2) / 2
-          return (
-            <path key={`chain-${task.id}`}
-              d={`M ${x1} ${y1} C ${mx} ${y1} ${mx} ${y2} ${x2} ${y2}`}
-              stroke="#27272a" strokeWidth="1" strokeDasharray="3 4"
-              fill="none" markerEnd="url(#tip-chain)"
-              style={{ pointerEvents: "none" }}
-            />
-          )
-        })
-      })()}
 
       {/* Nodes */}
       {tasks.map(task => {
@@ -425,11 +385,9 @@ function GraphCanvas({ tasks, allTasks, storageKey, selectedNodeId, connectingFr
             task={task} p={p}
             allTasks={allTasks}
             isSelected={selectedNodeId === task.id}
-            connectingFromId={connectingFromId}
             today={today}
             onPointerDown={e => onNodePointerDown(e, task.id)}
             onAddClick={() => onAddSubtask(task)}
-            onConnectClick={() => onConnectStart(task.id)}
           />
         )
       })}
@@ -447,73 +405,26 @@ export function TaskGraph({ tasks, allTasks, tab, onAddTask, onConnect, onDiscon
   onConnect: (taskId: number, depId: number) => Promise<void>
   onDisconnect: (taskId: number, depId: number) => Promise<void>
 }) {
-  const [selectedNodeId, setSelectedNodeId]   = useState<number | null>(null)
-  const [connectingFromId, setConnectingFromId] = useState<number | null>(null)
-  const [addingFor, setAddingFor]             = useState<Task | null>(null)
+  const [selectedNodeId, setSelectedNodeId] = useState<number | null>(null)
+  const [addingFor, setAddingFor]           = useState<Task | null>(null)
   const storageKey = `fenix_graph_positions_${tab}`
-
-  // Cancel connect mode on Escape
-  useEffect(() => {
-    function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape") setConnectingFromId(null)
-    }
-    window.addEventListener("keydown", onKey)
-    return () => window.removeEventListener("keydown", onKey)
-  }, [])
 
   if (tasks.length === 0) return null
 
   const selectedTask = selectedNodeId !== null ? allTasks.find(t => t.id === selectedNodeId) ?? null : null
 
-  function handleNodeSelect(task: Task) {
-    setSelectedNodeId(prev => prev === task.id ? null : task.id)
-  }
-
-  function handleConnectStart(taskId: number) {
-    setConnectingFromId(prev => prev === taskId ? null : taskId)
-    setSelectedNodeId(null)
-  }
-
-  async function handleConnectComplete(targetId: number) {
-    if (connectingFromId === null) return
-    await onConnect(connectingFromId, targetId)
-    setConnectingFromId(null)
-  }
-
   return (
     <div className="space-y-2">
-      {/* Connect mode banner */}
-      {connectingFromId !== null && (
-        <div className="flex items-center justify-between px-3 py-2 bg-blue-500/10 border border-blue-500/25 rounded-xl">
-          <p className="text-xs text-blue-400">
-            Toca el nodo que debe completarse <span className="font-semibold">antes</span> de "{allTasks.find(t => t.id === connectingFromId)?.title}"
-          </p>
-          <button onClick={() => setConnectingFromId(null)}
-            className="ml-3 shrink-0 text-blue-400 hover:text-blue-200 transition-colors">
-            <X size={14}/>
-          </button>
-        </div>
-      )}
-
       {/* Canvas */}
       <div className="overflow-x-auto overflow-y-auto rounded-2xl border border-slate-700/30 bg-zinc-950/60">
-        {tasks.length === 0 ? (
-          <div className="p-8 text-center text-zinc-600 text-sm">
-            Sin tareas. Toca <span className="text-zinc-400">+</span> para agregar.
-          </div>
-        ) : (
-          <GraphCanvas
-            tasks={tasks}
-            allTasks={allTasks}
-            storageKey={storageKey}
-            selectedNodeId={selectedNodeId}
-            connectingFromId={connectingFromId}
-            onNodeSelect={handleNodeSelect}
-            onAddSubtask={setAddingFor}
-            onConnectStart={handleConnectStart}
-            onConnectComplete={handleConnectComplete}
-          />
-        )}
+        <GraphCanvas
+          tasks={tasks}
+          allTasks={allTasks}
+          storageKey={storageKey}
+          selectedNodeId={selectedNodeId}
+          onNodeSelect={task => setSelectedNodeId(prev => prev === task.id ? null : task.id)}
+          onAddSubtask={setAddingFor}
+        />
       </div>
 
       {/* Description panel */}
@@ -533,7 +444,6 @@ export function TaskGraph({ tasks, allTasks, tab, onAddTask, onConnect, onDiscon
             <p className="text-xs text-zinc-600 italic">Sin descripción</p>
           )}
 
-          {/* Dependencies */}
           {selectedTask.dep_ids.length > 0 && (
             <div className="space-y-1.5 pt-1 border-t border-zinc-800">
               <p className="text-[10px] uppercase tracking-wider text-zinc-600">Requiere</p>
@@ -551,7 +461,6 @@ export function TaskGraph({ tasks, allTasks, tab, onAddTask, onConnect, onDiscon
                         setSelectedNodeId(null)
                       }}
                       className="text-zinc-600 hover:text-red-400 transition-colors shrink-0"
-                      title="Eliminar dependencia"
                     >
                       <X size={12}/>
                     </button>
@@ -563,12 +472,10 @@ export function TaskGraph({ tasks, allTasks, tab, onAddTask, onConnect, onDiscon
         </div>
       )}
 
-      {/* Legend */}
       <p className="text-[10px] text-zinc-600 px-1">
-        toca para ver detalles · + subtarea · → conectar nodo · arrastra para mover
+        toca para ver detalles · + agrega subtarea · arrastra para mover
       </p>
 
-      {/* Add subtask modal */}
       {addingFor && (
         <AddSubModal
           parent={addingFor}
