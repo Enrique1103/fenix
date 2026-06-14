@@ -8,6 +8,7 @@ import { MONTHS, DAYS_SHORT, daysInMonth, firstWeekdayOffset, toISODate } from "
 import { HabitCell } from "@/components/habit-cell"
 import { MoodEmoji } from "@/components/mood-emoji"
 import { MonthlyEKGChart } from "@/components/monthly-ekg-chart"
+import { diffClass } from "@/lib/color"
 
 type RecordMatrix = Record<string, Record<string, string>>
 
@@ -476,7 +477,7 @@ export default function HabitTrackerPage() {
               {diffPct >= 0
                 ? <TrendingUp size={11} className="text-green-400"/>
                 : <TrendingDown size={11} className="text-red-400"/>}
-              <span className={`text-sm font-bold tabular-nums leading-none ${diffPct >= 0 ? "text-green-400" : "text-red-400"}`}>
+              <span className={`text-sm font-bold tabular-nums leading-none ${diffClass(diffPct)}`}>
                 {diffPct >= 0 ? "+" : ""}{diffPct}%
               </span>
             </div>

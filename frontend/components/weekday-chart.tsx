@@ -1,14 +1,9 @@
 "use client"
 
 import { memo } from "react"
+import { semanticColor } from "@/lib/color"
 
 const DAYS = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"]
-
-function barColor(pct: number) {
-  if (pct >= 75) return "#22c55e"
-  if (pct >= 50) return "#eab308"
-  return "#ef4444"
-}
 
 export const WeekdayChart = memo(function WeekdayChart({ data }: { data: Record<string, number> }) {
   const values = DAYS.map((_, i) => data[String(i)] ?? 0)
@@ -22,7 +17,7 @@ export const WeekdayChart = memo(function WeekdayChart({ data }: { data: Record<
           <div className="w-full rounded-t-md transition-all duration-500"
             style={{
               height: `${Math.max((pct / max) * 56, 4)}px`,
-              backgroundColor: barColor(pct),
+              backgroundColor: semanticColor(pct),
               opacity: pct === 0 ? 0.2 : 1,
             }}
           />

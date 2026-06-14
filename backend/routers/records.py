@@ -353,3 +353,188 @@ def reset_month(year: int, month: int, user_id: str = Depends(get_user_id)):
 def reset_all(user_id: str = Depends(get_user_id)):
     db = get_db()
     db.table("records").delete().eq("user_id", user_id).execute()
+
+
+@router.get("/recovery")
+def get_recovery(user_id: str = Depends(get_user_id)):
+    db = get_db()
+    habits_res = db.table("habits").select("id").eq("user_id", user_id).eq("active", True).execute()
+    habit_ids = [str(h["id"]) for h in habits_res.data]
+    habit_count = len(habit_ids)
+
+    if habit_count == 0:
+        return {"avg": 0, "best": 0, "worst": 0, "last_fall": None, "last_recovery_days": None, "episodes": 0}
+
+    first_res = db.table("records").select("date").eq("user_id", user_id).order("date").limit(1).execute()
+    if not first_res.data:
+        return {"avg": 0, "best": 0, "worst": 0, "last_fall": None, "last_recovery_days": None, "episodes": 0}
+
+    start = date_type.fromisoformat(str(first_res.data[0]["date"])[:10])
+    today = date_type.today()
+
+    records = db.table("records").select("date, habit_id, state")\
+        .eq("user_id", user_id).gte("date", str(start)).lte("date", str(today)).execute()
+
+    by_date: dict[str, dict[str, str]] = {}
+    for r in records.data:
+        d = str(r["date"])[:10]
+        by_date.setdefault(d, {})[str(r["habit_id"])] = r["state"]
+
+    def day_status(key: str) -> str:
+        day = by_date.get(key, {})
+        if not day:
+            return "empty"
+        all_rest = all(day.get(hid) == "rest" for hid in habit_ids)
+        if all_rest:
+            return "rest"
+        active = [hid for hid in habit_ids if day.get(hid) != "rest"]
+        if not active:
+            return "rest"
+        if all(day.get(hid) == "done" for hid in active):
+            return "perfect"
+        return "failed"
+
+    episodes = []
+    in_fall = False
+    fall_date = None
+    fall_days = 0
+
+    cur = start
+    while cur <= today:
+        key = str(cur)
+        status = day_status(key)
+
+        if status == "rest":
+            cur += timedelta(days=1)
+            continue
+
+        if not in_fall:
+            if status in ("failed", "empty"):
+                in_fall = True
+                fall_date = cur
+                fall_days = 1
+        else:
+            if status == "perfect":
+                episodes.append({"fall": str(fall_date), "days": fall_days})
+                in_fall = False
+                fall_date = None
+                fall_days = 0
+            else:
+                fall_days += 1
+
+        cur += timedelta(days=1)
+
+    if not episodes:
+        return {
+            "avg": 0, "best": 0, "worst": 0,
+            "last_fall": str(fall_date) if fall_date else None,
+            "last_recovery_days": None,
+            "episodes": 0,
+        }
+
+    days_list = [e["days"] for e in episodes]
+    last = episodes[-1]
+    return {
+        "avg": round(sum(days_list) / len(days_list), 1),
+        "best": min(days_list),
+        "worst": max(days_list),
+        "last_fall": last["fall"],
+        "last_recovery_days": last["days"],
+        "episodes": len(episodes),
+    }
+
+
+@router.get("/month-stats/{year}/{month}")
+def month_stats(year: int, month: int, user_id: str = Depends(get_user_id)):
+    db = get_db()
+    habits_res = db.table("habits").select("id, name").eq("user_id", user_id).eq("active", True).execute()
+    habits = habits_res.data
+    habit_ids = [str(h["id"]) for h in habits]
+    habit_count = len(habit_ids)
+
+    if habit_count == 0:
+        return {
+            "fulfillment_pct": 0, "fulfillment_done": 0, "fulfillment_rest": 0,
+            "fulfillment_failed": 0, "fulfillment_possible": 0,
+            "perfect_days": 0, "partial_days": 0, "empty_days": 0,
+            "habit_consistency": [], "habit_count": 0,
+        }
+
+    start, end = _month_range(year, month)
+    today = date_type.today()
+    cap = str(today) if (year, month) == (today.year, today.month) else end
+    days_elapsed = today.day if (year, month) == (today.year, today.month) else calendar.monthrange(year, month)[1]
+
+    records = db.table("records").select("date, habit_id, state")\
+        .gte("date", start).lte("date", cap).eq("user_id", user_id).execute()
+
+    by_date: dict[str, dict[str, str]] = {}
+    for r in records.data:
+        d = str(r["date"])[:10]
+        by_date.setdefault(d, {})[str(r["habit_id"])] = r["state"]
+
+    total_done = total_rest = total_failed = 0
+    perfect_days = partial_days = empty_days = 0
+    habit_done: dict[str, int] = {hid: 0 for hid in habit_ids}
+    habit_rest: dict[str, int] = {hid: 0 for hid in habit_ids}
+
+    for i in range(days_elapsed):
+        d = str(date_type(year, month, i + 1))
+        day = by_date.get(d, {})
+
+        if not day:
+            empty_days += 1
+            continue
+
+        done_count = rest_count = failed_count = 0
+        for hid in habit_ids:
+            s = day.get(hid)
+            if s == "done":
+                done_count += 1
+                habit_done[hid] = habit_done.get(hid, 0) + 1
+            elif s == "rest":
+                rest_count += 1
+                habit_rest[hid] = habit_rest.get(hid, 0) + 1
+            else:
+                failed_count += 1
+
+        total_done += done_count
+        total_rest += rest_count
+        total_failed += failed_count
+
+        active = habit_count - rest_count
+        if active == 0:
+            continue
+        if done_count == active:
+            perfect_days += 1
+        elif done_count > 0:
+            partial_days += 1
+        else:
+            empty_days += 1
+
+    possible = days_elapsed * habit_count - total_rest
+    fulfillment_pct = round(total_done / possible * 100, 1) if possible > 0 else 0
+
+    habit_consistency = []
+    for h in habits:
+        hid = str(h["id"])
+        done = habit_done.get(hid, 0)
+        rest = habit_rest.get(hid, 0)
+        denom = days_elapsed - rest
+        pct = round(done / denom * 100, 1) if denom > 0 else 0
+        habit_consistency.append({"id": hid, "name": h["name"], "pct": pct})
+
+    habit_consistency.sort(key=lambda x: x["pct"], reverse=True)
+
+    return {
+        "fulfillment_pct": fulfillment_pct,
+        "fulfillment_done": total_done,
+        "fulfillment_rest": total_rest,
+        "fulfillment_failed": total_failed,
+        "fulfillment_possible": possible,
+        "perfect_days": perfect_days,
+        "partial_days": partial_days,
+        "empty_days": empty_days,
+        "habit_consistency": habit_consistency,
+        "habit_count": habit_count,
+    }

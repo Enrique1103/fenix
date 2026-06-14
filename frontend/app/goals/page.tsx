@@ -11,6 +11,7 @@ import {
 } from "@/lib/api"
 import { Goal, Habit, GoalProgress } from "@/lib/types"
 import { supabase } from "@/lib/supabase"
+import { semanticColor } from "@/lib/color"
 
 type ViewMode = "list" | "cards"
 
@@ -36,7 +37,7 @@ function getFlame(streak: number) {
 }
 
 function barColor(pct: number) {
-  return pct >= 80 ? "#22c55e" : pct >= 50 ? "#eab308" : "#ef4444"
+  return semanticColor(pct)
 }
 
 // ── Shared display interface ──────────────────────────────────────────────────

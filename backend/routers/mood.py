@@ -26,6 +26,21 @@ def get_month_mood(year: int, month: int, user_id: str = Depends(get_user_id)):
     return {str(r["date"]): r["level"] for r in res.data}
 
 
+@router.get("/{year}/{month}/avg")
+def get_mood_avg(year: int, month: int, user_id: str = Depends(get_user_id)):
+    import calendar as cal
+    db = get_db()
+    start = f"{year:04d}-{month:02d}-01"
+    last_day = cal.monthrange(year, month)[1]
+    end = f"{year:04d}-{month:02d}-{last_day:02d}"
+    res = db.table("daily_mood").select("level").gte("date", start).lte("date", end)\
+        .eq("user_id", user_id).execute()
+    if not res.data:
+        return {"avg": None}
+    avg = round(sum(r["level"] for r in res.data) / len(res.data), 1)
+    return {"avg": avg}
+
+
 @router.post("/set")
 def set_mood(body: MoodSet, user_id: str = Depends(get_user_id)):
     db = get_db()

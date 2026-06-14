@@ -146,6 +146,39 @@ export const removeTaskDep = (taskId: number, depId: number): Promise<void> =>
 export const getMonthMood = (year: number, month: number): Promise<Record<string, number>> =>
   req(`/mood/${year}/${month}`)
 
+export const getMoodAvg = (year: number, month: number): Promise<{ avg: number | null }> =>
+  req(`/mood/${year}/${month}/avg`)
+
+// ── Stats ─────────────────────────────────────────────────────────────────────
+
+export interface MonthStats {
+  fulfillment_pct: number
+  fulfillment_done: number
+  fulfillment_rest: number
+  fulfillment_failed: number
+  fulfillment_possible: number
+  perfect_days: number
+  partial_days: number
+  empty_days: number
+  habit_consistency: { id: string; name: string; pct: number }[]
+  habit_count: number
+}
+
+export interface RecoveryStats {
+  avg: number
+  best: number
+  worst: number
+  last_fall: string | null
+  last_recovery_days: number | null
+  episodes: number
+}
+
+export const getMonthStats = (year: number, month: number): Promise<MonthStats> =>
+  req(`/records/month-stats/${year}/${month}`)
+
+export const getRecovery = (): Promise<RecoveryStats> =>
+  req("/records/recovery")
+
 export const setMood = (date: string, level: number): Promise<{ level: number }> =>
   req("/mood/set", { method: "POST", body: JSON.stringify({ date, level }) })
 
