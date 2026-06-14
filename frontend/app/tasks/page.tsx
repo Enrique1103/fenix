@@ -6,8 +6,7 @@ import { getTasks, createTask, updateTask, deleteTask, addTaskDep, removeTaskDep
 import { Task } from "@/lib/types"
 import dynamic from "next/dynamic"
 
-const SankeyChart = dynamic(() => import("@/components/sankey-chart").then(m => ({ default: m.SankeyChart })), { ssr: false })
-const TaskGraph   = dynamic(() => import("@/components/task-graph").then(m => ({ default: m.TaskGraph })),   {
+const TaskGraph = dynamic(() => import("@/components/task-graph").then(m => ({ default: m.TaskGraph })), {
   ssr: false,
   loading: () => <div className="h-64 bg-zinc-900 rounded-2xl animate-pulse"/>,
 })
@@ -293,13 +292,6 @@ export default function TasksPage() {
   const pending   = roots.filter(t => !t.completed)
   const completed = roots.filter(t => t.completed)
 
-  const today = getToday()
-  const sankeyData = {
-    completed: tabTasks.filter(t => t.completed).length,
-    overdue:   tabTasks.filter(t => !t.completed && !!t.deadline && t.deadline < today).length,
-    pending:   tabTasks.filter(t => !t.completed && (!t.deadline || t.deadline >= today)).length,
-  }
-
   async function handleAddTask(title: string, deadline: string, parentId?: number) {
     await createTask({ title, type: tab, deadline: deadline || undefined, parent_task_id: parentId })
     await load()
@@ -366,24 +358,6 @@ export default function TasksPage() {
       </div>
 
       <div className="p-4 space-y-4">
-
-        {/* Sankey */}
-        {allTasks.length > 0 && (
-          <div className="gc p-4" style={{ borderColor: sankeyData.overdue > 0 ? "rgba(239,68,68,0.25)" : undefined }}>
-            <div className="flex items-start justify-between mb-3">
-              <div>
-                <p className="text-xs font-semibold text-zinc-200">Análisis de Fuga de Energía</p>
-                <p className="text-[10px] text-zinc-500 mt-0.5">{allTasks.length} tareas en total</p>
-              </div>
-              {sankeyData.overdue > 0 && (
-                <span className="text-[10px] text-red-400 bg-red-500/10 border border-red-500/20 px-2 py-1 rounded-lg font-medium shrink-0">
-                  ⚡ {sankeyData.overdue} vencida{sankeyData.overdue > 1 ? "s" : ""}
-                </span>
-              )}
-            </div>
-            <SankeyChart data={sankeyData}/>
-          </div>
-        )}
 
         {/* Add form */}
         {showForm ? (
