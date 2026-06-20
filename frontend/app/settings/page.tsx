@@ -1,36 +1,19 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { Plus, Pencil, Trash2, Check, X, Bell, MessageSquareQuote, Clock, LogOut } from "lucide-react"
-import { getHabits, createHabit, updateHabit, deleteHabit, resetMonth, resetAll, reorderHabits } from "@/lib/api"
-import { Habit } from "@/lib/types"
+import { Bell, MessageSquareQuote, Clock, LogOut } from "lucide-react"
+import { resetMonth, resetAll } from "@/lib/api"
 import { getSettings, saveSettings, QuoteSettings } from "@/lib/quote-utils"
 import { supabase } from "@/lib/supabase"
 
 export default function SettingsPage() {
-  const [habits, setHabits]     = useState<Habit[]>([])
-  const [loading, setLoading]   = useState(true)
-  const [newName, setNewName]   = useState("")
-  const [adding, setAdding]     = useState(false)
-  const [editingId, setEditingId] = useState<string | null>(null)
-  const [editName, setEditName] = useState("")
   const [confirm, setConfirm]   = useState<null | "month" | "all">(null)
-  const [apiError, setApiError] = useState("")
-  const [dragOverId, setDragOverId] = useState<string | null>(null)
-
   const [settings, setSettings] = useState<QuoteSettings>({
     habitTime: "21:00", quoteTime: "07:30", quoteCount: 1,
   })
   const [saved, setSaved] = useState(false)
 
-  async function load() {
-    const h = await getHabits()
-    setHabits(h)
-    setLoading(false)
-  }
-
   useEffect(() => {
-    load()
     setSettings(getSettings())
   }, [])
 
@@ -38,51 +21,6 @@ export default function SettingsPage() {
     saveSettings(settings)
     setSaved(true)
     setTimeout(() => setSaved(false), 2000)
-  }
-
-  async function handleAdd() {
-    if (!newName.trim()) return
-    setApiError("")
-    try {
-      await createHabit(newName.trim())
-      setNewName(""); setAdding(false); load()
-    } catch (e) {
-      setApiError(e instanceof Error ? e.message : "Error desconocido")
-    }
-  }
-
-  async function handleRename(id: string) {
-    if (!editName.trim()) return
-    await updateHabit(id, { name: editName.trim() })
-    setEditingId(null); load()
-  }
-
-  async function handleDelete(id: string) {
-    await deleteHabit(id); load()
-  }
-
-  function handleDragStart(e: React.DragEvent, id: string) {
-    e.dataTransfer.setData("habitId", id)
-  }
-
-  function handleDragOver(e: React.DragEvent, id: string) {
-    e.preventDefault()
-    setDragOverId(id)
-  }
-
-  async function handleDrop(e: React.DragEvent, targetId: string) {
-    e.preventDefault()
-    setDragOverId(null)
-    const draggedId = e.dataTransfer.getData("habitId")
-    if (!draggedId || draggedId === targetId) return
-    const reordered = [...habits]
-    const fromIdx = reordered.findIndex(h => h.id === draggedId)
-    const toIdx   = reordered.findIndex(h => h.id === targetId)
-    if (fromIdx === -1 || toIdx === -1) return
-    const [moved] = reordered.splice(fromIdx, 1)
-    reordered.splice(toIdx, 0, moved)
-    setHabits(reordered)
-    await reorderHabits(reordered.map(h => h.id))
   }
 
   async function handleResetMonth() {
@@ -104,80 +42,6 @@ export default function SettingsPage() {
       </div>
 
       <div className="p-4 space-y-4">
-
-        {/* ── Hábitos ── */}
-        <div className="gc overflow-hidden">
-          <div className="flex items-center justify-between px-4 py-3 border-b border-slate-700/40">
-            <p className="text-xs uppercase tracking-wider text-zinc-400">Hábitos</p>
-            <button onClick={() => setAdding(true)}
-              className="flex items-center gap-1 text-xs text-green-400 hover:text-green-300 transition-colors">
-              <Plus size={14}/> Agregar
-            </button>
-          </div>
-
-          {adding && (
-            <div className="border-b border-slate-700/40">
-              <div className="flex items-center gap-2 px-4 py-3 bg-zinc-800/40">
-                <input autoFocus value={newName}
-                  onChange={e => setNewName(e.target.value)}
-                  onKeyDown={e => { if (e.key === "Enter") handleAdd(); if (e.key === "Escape") { setAdding(false); setApiError("") } }}
-                  placeholder="Nombre del hábito"
-                  className="flex-1 bg-transparent text-sm outline-none placeholder-zinc-500"
-                />
-                <button onClick={handleAdd} className="text-green-400 hover:text-green-300 p-1"><Check size={16}/></button>
-                <button onClick={() => { setAdding(false); setApiError("") }} className="text-zinc-500 hover:text-zinc-300 p-1"><X size={16}/></button>
-              </div>
-              {apiError && <p className="px-4 py-1.5 text-xs text-red-400 bg-red-500/10">{apiError}</p>}
-            </div>
-          )}
-
-          {loading ? (
-            <div className="p-4 space-y-3">
-              {Array.from({length: 3}).map((_, i) => (
-                <div key={i} className="h-8 bg-zinc-800 rounded-lg animate-pulse"/>
-              ))}
-            </div>
-          ) : habits.length === 0 ? (
-            <p className="text-center text-zinc-500 text-sm py-6">Sin hábitos</p>
-          ) : (
-            habits.map((h, idx) => (
-              <div key={h.id}
-                draggable={editingId !== h.id}
-                onDragStart={e => handleDragStart(e, h.id)}
-                onDragOver={e => handleDragOver(e, h.id)}
-                onDragLeave={() => setDragOverId(null)}
-                onDrop={e => handleDrop(e, h.id)}
-                className={`flex items-center gap-3 px-4 py-3 transition-colors
-                  ${idx < habits.length - 1 ? "border-b border-slate-700/25" : ""}
-                  ${dragOverId === h.id ? "bg-zinc-800/60" : ""}`}>
-                <span className="text-zinc-600 cursor-grab select-none text-sm">⠿</span>
-                {editingId === h.id ? (
-                  <>
-                    <input autoFocus value={editName}
-                      onChange={e => setEditName(e.target.value)}
-                      onKeyDown={e => { if (e.key === "Enter") handleRename(h.id); if (e.key === "Escape") setEditingId(null) }}
-                      className="flex-1 bg-zinc-800 rounded-lg px-2 py-1 text-sm outline-none"
-                    />
-                    <button onClick={() => handleRename(h.id)} className="text-green-400 p-1"><Check size={15}/></button>
-                    <button onClick={() => setEditingId(null)} className="text-zinc-500 p-1"><X size={15}/></button>
-                  </>
-                ) : (
-                  <>
-                    <span className="flex-1 text-sm text-zinc-200">{h.name}</span>
-                    <button onClick={() => { setEditingId(h.id); setEditName(h.name) }}
-                      className="text-zinc-500 hover:text-zinc-300 p-1 transition-colors">
-                      <Pencil size={15}/>
-                    </button>
-                    <button onClick={() => handleDelete(h.id)}
-                      className="text-zinc-500 hover:text-red-400 p-1 transition-colors">
-                      <Trash2 size={15}/>
-                    </button>
-                  </>
-                )}
-              </div>
-            ))
-          )}
-        </div>
 
         {/* ── Recordatorios y Frases ── */}
         <div className="gc overflow-hidden">
