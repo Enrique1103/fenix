@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useState, useRef, useCallback } from "react"
-import { ChevronLeft, ChevronRight, Plus, Check, Pencil, Trash2, X } from "lucide-react"
+import { ChevronLeft, ChevronRight, Plus, Check, ChevronDown, Pencil, Trash2, X } from "lucide-react"
 import {
   getDayView,
   createTemplate,
@@ -55,6 +55,148 @@ function nowTopPx(): number {
   return (now.getHours() * 60 + now.getMinutes()) / 60 * ROW_H
 }
 
+// ── ClockPicker ───────────────────────────────────────────────────────────────
+
+function ClockPicker({ value, onChange, onDone }: {
+  value: string
+  onChange: (v: string) => void
+  onDone?: () => void
+}) {
+  const [mode, setMode]       = useState<"hour" | "minute">("hour")
+  const [dragging, setDragging] = useState(false)
+  const parts  = value.split(":")
+  const [hour, setHour]       = useState(parseInt(parts[0]) || 0)
+  const [minute, setMinute]   = useState(parseInt(parts[1]) || 0)
+
+  const SIZE    = 220
+  const C       = SIZE / 2
+  const R_OUT   = 85
+  const R_IN    = 55
+
+  const OUTER_H = [12, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
+  const INNER_H = [0, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23]
+  const MINS    = [0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55]
+
+  function polar(deg: number, r: number) {
+    const rad = (deg - 90) * Math.PI / 180
+    return { x: C + r * Math.cos(rad), y: C + r * Math.sin(rad) }
+  }
+
+  function applyPointer(e: React.PointerEvent<SVGSVGElement>) {
+    const rect  = e.currentTarget.getBoundingClientRect()
+    const x     = e.clientX - rect.left - C
+    const y     = e.clientY - rect.top  - C
+    const raw   = Math.atan2(y, x) * (180 / Math.PI) + 90
+    const angle = ((raw % 360) + 360) % 360
+    const dist  = Math.sqrt(x * x + y * y)
+
+    if (mode === "hour") {
+      const idx  = Math.round(angle / 30) % 12
+      const inner = dist < (R_OUT + R_IN) / 2
+      const newH  = inner ? INNER_H[idx] : OUTER_H[idx]
+      setHour(newH)
+      onChange(`${String(newH).padStart(2, "0")}:${String(minute).padStart(2, "0")}`)
+    } else {
+      const raw5    = Math.round(angle / 6) % 60
+      const snapped = Math.round(raw5 / 5) * 5 % 60
+      setMinute(snapped)
+      onChange(`${String(hour).padStart(2, "0")}:${String(snapped).padStart(2, "0")}`)
+    }
+  }
+
+  function onPD(e: React.PointerEvent<SVGSVGElement>) {
+    e.stopPropagation()
+    e.currentTarget.setPointerCapture(e.pointerId)
+    setDragging(true)
+    applyPointer(e)
+  }
+  function onPM(e: React.PointerEvent<SVGSVGElement>) {
+    if (!dragging) return
+    applyPointer(e)
+  }
+  function onPU() {
+    setDragging(false)
+    if (mode === "hour") setMode("minute")
+    else onDone?.()
+  }
+
+  const isInner    = hour === 0 || hour >= 13
+  const handAngle  = mode === "hour"
+    ? (isInner ? INNER_H.indexOf(hour) : OUTER_H.indexOf(hour)) * 30
+    : minute * 6
+  const handR      = mode === "hour" ? (isInner ? R_IN : R_OUT) : R_OUT
+  const handEnd    = polar(handAngle, handR)
+  const handBase   = polar(handAngle, 6)
+
+  return (
+    <div className="flex flex-col items-center select-none">
+      {/* HH:MM display */}
+      <div className="flex items-center gap-1 mb-3">
+        <button onClick={() => setMode("hour")}
+          className={`text-2xl font-bold px-2 py-1 rounded-lg transition-colors min-w-[52px] text-center
+            ${mode === "hour" ? "text-green-400 bg-green-500/10" : "text-zinc-400 hover:text-zinc-200"}`}>
+          {String(hour).padStart(2, "0")}
+        </button>
+        <span className="text-2xl font-bold text-zinc-600">:</span>
+        <button onClick={() => setMode("minute")}
+          className={`text-2xl font-bold px-2 py-1 rounded-lg transition-colors min-w-[52px] text-center
+            ${mode === "minute" ? "text-green-400 bg-green-500/10" : "text-zinc-400 hover:text-zinc-200"}`}>
+          {String(minute).padStart(2, "0")}
+        </button>
+      </div>
+
+      {/* Clock face */}
+      <svg width={SIZE} height={SIZE} className="cursor-pointer touch-none"
+        onPointerDown={onPD} onPointerMove={onPM} onPointerUp={onPU}>
+        <circle cx={C} cy={C} r={C - 4} fill="rgba(18,18,22,0.97)" />
+
+        {/* Hand */}
+        <line x1={handBase.x} y1={handBase.y} x2={handEnd.x} y2={handEnd.y}
+          stroke="#22c55e" strokeWidth={2} strokeLinecap="round" />
+        <circle cx={C} cy={C} r={3} fill="#22c55e" />
+        <circle cx={handEnd.x} cy={handEnd.y} r={18} fill="rgba(34,197,94,0.12)" />
+        <circle cx={handEnd.x} cy={handEnd.y} r={5}  fill="#22c55e" />
+
+        {mode === "hour" ? (<>
+          {OUTER_H.map((h, i) => {
+            const p = polar(i * 30, R_OUT); const sel = hour === h
+            return <g key={`o${h}`}>
+              {sel && <circle cx={p.x} cy={p.y} r={16} fill="#22c55e" />}
+              <text x={p.x} y={p.y} textAnchor="middle" dominantBaseline="central"
+                fontSize={13} fill={sel ? "#fff" : "#a1a1aa"} fontWeight={sel ? "700" : "400"}>{h}</text>
+            </g>
+          })}
+          {INNER_H.map((h, i) => {
+            const p = polar(i * 30, R_IN); const sel = hour === h
+            return <g key={`i${h}`}>
+              {sel && <circle cx={p.x} cy={p.y} r={14} fill="#22c55e" />}
+              <text x={p.x} y={p.y} textAnchor="middle" dominantBaseline="central"
+                fontSize={10} fill={sel ? "#fff" : "#71717a"} fontWeight={sel ? "700" : "400"}>
+                {String(h).padStart(2, "0")}
+              </text>
+            </g>
+          })}
+        </>) : (
+          MINS.map((m, i) => {
+            const p = polar(i * 30, R_OUT); const sel = minute === m
+            return <g key={m}>
+              {sel && <circle cx={p.x} cy={p.y} r={16} fill="#22c55e" />}
+              <text x={p.x} y={p.y} textAnchor="middle" dominantBaseline="central"
+                fontSize={12} fill={sel ? "#fff" : "#a1a1aa"} fontWeight={sel ? "700" : "400"}>
+                {String(m).padStart(2, "0")}
+              </text>
+            </g>
+          })
+        )}
+      </svg>
+
+      <p className="text-[10px] text-zinc-600 uppercase tracking-widest mt-2">
+        {mode === "hour" ? "Selecciona la hora" : "Selecciona los minutos"}
+      </p>
+    </div>
+  )
+}
+
 // ── BlockModal ────────────────────────────────────────────────────────────────
 
 function BlockModal({
@@ -87,6 +229,8 @@ function BlockModal({
   const [showNewCat, setShowNewCat]     = useState(false)
   const [newCatLabel, setNewCatLabel]   = useState("")
   const [newCatColor, setNewCatColor]   = useState("#8b5cf6")
+  const [activePicker, setActivePicker] = useState<"start" | "end" | null>(null)
+  const [habitOpen, setHabitOpen]       = useState(false)
 
   const allCategories = [
     ...baseCategories.map(c => ({ id: c.slug, label: c.label, color: c.color })),
@@ -130,8 +274,10 @@ function BlockModal({
     onClose()
   }
 
+  const selectedHabit = habits.find(h => h.id === habitId)
+
   return (
-    <div className="fixed inset-0 bg-black/70 z-40 flex items-center justify-center px-4" onClick={onClose}>
+    <div className="fixed inset-0 bg-black/50 z-40 flex items-center justify-center px-4" onClick={onClose}>
       <div className="w-full max-w-lg bg-zinc-900 border border-slate-700/40 rounded-2xl
         p-5 max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between mb-4">
@@ -156,35 +302,57 @@ function BlockModal({
         </div>
 
         {/* Horario */}
-        <div className="grid grid-cols-2 gap-2 mb-3">
-          <div>
-            <label className="text-[10px] uppercase tracking-widest text-zinc-600 mb-1.5 block">Inicio</label>
-            <input type="time" value={startTime} onChange={e => setStartTime(e.target.value)}
-              className="w-full bg-zinc-800 border border-slate-700/40 rounded-xl px-3 py-2.5
-                text-sm text-zinc-200 outline-none"/>
+        <div className="mb-3">
+          <label className="text-[10px] uppercase tracking-widest text-zinc-600 mb-1.5 block">Horario</label>
+          <div className="grid grid-cols-2 gap-2">
+            {(["start", "end"] as const).map(which => {
+              const val   = which === "start" ? startTime : endTime
+              const label = which === "start" ? "Inicio" : "Fin"
+              const active = activePicker === which
+              return (
+                <div key={which}>
+                  <p className="text-[10px] text-zinc-600 mb-1">{label}</p>
+                  <button
+                    onPointerDown={e => e.stopPropagation()}
+                    onClick={() => setActivePicker(active ? null : which)}
+                    className={`w-full rounded-xl px-3 py-2.5 text-sm font-mono text-left border transition-all
+                      ${active
+                        ? "bg-zinc-800 border-green-500/40 text-green-400"
+                        : "bg-zinc-800 border-slate-700/40 text-zinc-200 hover:border-zinc-600"}`}>
+                    {val}
+                  </button>
+                </div>
+              )
+            })}
           </div>
-          <div>
-            <label className="text-[10px] uppercase tracking-widest text-zinc-600 mb-1.5 block">Fin</label>
-            <input type="time" value={endTime} onChange={e => setEndTime(e.target.value)}
-              className="w-full bg-zinc-800 border border-slate-700/40 rounded-xl px-3 py-2.5
-                text-sm text-zinc-200 outline-none"/>
-          </div>
+          {activePicker && (
+            <div className="mt-3 flex justify-center bg-zinc-800/50 rounded-2xl py-4">
+              <ClockPicker
+                key={activePicker}
+                value={activePicker === "start" ? startTime : endTime}
+                onChange={v => activePicker === "start" ? setStartTime(v) : setEndTime(v)}
+                onDone={() => setActivePicker(null)}
+              />
+            </div>
+          )}
         </div>
 
         {/* Categoría */}
         <div className="mb-3">
           <label className="text-[10px] uppercase tracking-widest text-zinc-600 mb-1.5 block">Categoría</label>
           <div className="flex flex-wrap gap-2">
-            {allCategories.map(cat => (
-              <button key={cat.id}
-                onClick={() => { setCategory(cat.id); setCategoryLabel(cat.label); setCategoryColor(cat.color) }}
-                className="px-3 py-1.5 rounded-full text-xs border transition-all"
-                style={category === cat.id
-                  ? { background: `${cat.color}22`, borderColor: cat.color, color: cat.color }
-                  : { background: "rgba(39,39,42,0.6)", borderColor: "rgba(71,85,105,0.4)", color: "#71717a" }}>
-                {cat.label}
-              </button>
-            ))}
+            {allCategories.map(cat => {
+              const sel = category === cat.id
+              return (
+                <button key={cat.id}
+                  onClick={() => { setCategory(cat.id); setCategoryLabel(cat.label); setCategoryColor(cat.color) }}
+                  className={`px-3 py-1.5 rounded-full text-xs border transition-all
+                    ${sel ? "" : "bg-zinc-800 border-slate-700/40 text-zinc-500"}`}
+                  style={sel ? { background: `${cat.color}22`, borderColor: cat.color, color: cat.color } : {}}>
+                  {cat.label}
+                </button>
+              )
+            })}
             {!showNewCat ? (
               <button onClick={() => setShowNewCat(true)}
                 className="px-3 py-1.5 rounded-full text-xs border border-dashed border-slate-700/40 text-zinc-600">
@@ -224,12 +392,36 @@ function BlockModal({
             <label className="text-[10px] uppercase tracking-widest text-zinc-600 mb-1.5 block">
               Vincular hábito (opcional)
             </label>
-            <select value={habitId} onChange={e => setHabitId(e.target.value)}
-              className="w-full bg-zinc-800 border border-slate-700/40 rounded-xl px-3 py-2.5
-                text-sm text-zinc-400 outline-none">
-              <option value="">— Sin vincular —</option>
-              {habits.map(h => <option key={h.id} value={h.id}>{h.name}</option>)}
-            </select>
+            <div className="relative">
+              <button
+                onPointerDown={e => e.stopPropagation()}
+                onClick={() => setHabitOpen(o => !o)}
+                className="w-full bg-zinc-800 border border-slate-700/40 rounded-xl px-3 py-2.5
+                  text-sm text-left flex items-center justify-between text-zinc-300 hover:border-zinc-600 transition-all">
+                <span className={selectedHabit ? "text-zinc-200" : "text-zinc-500"}>
+                  {selectedHabit ? selectedHabit.name : "— Sin vincular —"}
+                </span>
+                <ChevronDown size={14} className={`text-zinc-500 transition-transform ${habitOpen ? "rotate-180" : ""}`}/>
+              </button>
+              {habitOpen && (
+                <div className="absolute top-full left-0 right-0 mt-1 bg-zinc-900 border border-slate-700/40
+                  rounded-xl overflow-hidden z-10 shadow-xl">
+                  <button
+                    onClick={() => { setHabitId(""); setHabitOpen(false) }}
+                    className="w-full px-3 py-2.5 text-sm text-zinc-500 text-left hover:bg-zinc-800 transition-colors">
+                    — Sin vincular —
+                  </button>
+                  {habits.map(h => (
+                    <button key={h.id}
+                      onClick={() => { setHabitId(h.id); setHabitOpen(false) }}
+                      className={`w-full px-3 py-2.5 text-sm text-left hover:bg-zinc-800 transition-colors border-t border-slate-700/20
+                        ${habitId === h.id ? "text-green-400" : "text-zinc-300"}`}>
+                      {h.name}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
         )}
 
