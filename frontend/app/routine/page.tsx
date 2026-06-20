@@ -4,6 +4,7 @@ import { useEffect, useState, useRef, useCallback } from "react"
 import { ChevronLeft, ChevronRight, Plus, Check, Trash2, X } from "lucide-react"
 import {
   getDayView,
+  createTemplate,
   createBlock, updateBlock, deleteBlock,
   createDayBlock, updateDayBlock, deleteDayBlock,
   completeBlock,
@@ -294,6 +295,9 @@ export default function RoutinePage() {
     block: Partial<RoutineBlock & RoutineDayBlock> | null
   }>({ open: false, mode: "create", isDay: true, block: null })
 
+  const [tmplModal, setTmplModal]     = useState(false)
+  const [newTmplName, setNewTmplName] = useState("")
+
   const dragRef = useRef<{
     blockId: number; isDay: boolean
     startY: number; startMins: number; duration: number
@@ -399,12 +403,20 @@ export default function RoutinePage() {
       <div className="px-4 pt-4 pb-3 border-b border-slate-700/35 sticky top-[128px] z-10 bg-[var(--sticky-bg)]">
         <div className="flex items-center justify-between mb-3">
           <h1 className="text-lg font-bold">Mi Día</h1>
-          <button
-            onClick={() => setModal({ open: true, mode: "create", isDay: true, block: null })}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold
-              bg-green-500/10 text-green-400 border border-green-500/25 hover:bg-green-500/20 transition-colors">
-            <Plus size={13}/> Bloque
-          </button>
+          <div className="flex gap-2">
+            <button
+              onClick={() => setTmplModal(true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold
+                bg-zinc-800 text-zinc-400 border border-slate-700/40 hover:text-zinc-200 transition-colors">
+              <Plus size={13}/> Plantilla
+            </button>
+            <button
+              onClick={() => setModal({ open: true, mode: "create", isDay: true, block: null })}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold
+                bg-green-500/10 text-green-400 border border-green-500/25 hover:bg-green-500/20 transition-colors">
+              <Plus size={13}/> Bloque
+            </button>
+          </div>
         </div>
 
       </div>
@@ -550,6 +562,40 @@ export default function RoutinePage() {
         />
       )}
 
+      {/* ── Modal nueva plantilla ── */}
+      {tmplModal && (
+        <div className="fixed inset-0 bg-black/70 z-40 flex items-end" onClick={() => setTmplModal(false)}>
+          <div className="w-full max-w-lg mx-auto bg-zinc-900 border-t border-slate-700/40 rounded-t-2xl p-5"
+            onClick={e => e.stopPropagation()}>
+            <div className="w-9 h-1 bg-zinc-700 rounded mx-auto mb-4"/>
+            <p className="text-sm font-semibold text-zinc-200 mb-3">Nueva plantilla</p>
+            <input
+              autoFocus value={newTmplName} onChange={e => setNewTmplName(e.target.value)}
+              onKeyDown={e => { if (e.key === "Enter" && newTmplName.trim()) { createTemplate({ name: newTmplName.trim() }).then(() => { setNewTmplName(""); setTmplModal(false); load() }) }}}
+              placeholder="Ej: Semana laboral"
+              className="w-full bg-zinc-800 border border-slate-700/40 rounded-xl px-3 py-2.5
+                text-sm text-zinc-200 outline-none focus:border-green-500/40"
+            />
+            <div className="flex gap-2 mt-4">
+              <button onClick={() => setTmplModal(false)}
+                className="flex-1 py-2.5 rounded-xl border border-slate-700/40 text-zinc-500 text-sm">
+                Cancelar
+              </button>
+              <button
+                onClick={async () => {
+                  if (!newTmplName.trim()) return
+                  await createTemplate({ name: newTmplName.trim() })
+                  setNewTmplName("")
+                  setTmplModal(false)
+                  load()
+                }}
+                className="flex-1 py-2.5 rounded-xl bg-green-500 hover:bg-green-400 text-black text-sm font-semibold transition-colors">
+                Crear
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
