@@ -470,6 +470,59 @@ function BlockModal({
   )
 }
 
+// ── TmplModal ────────────────────────────────────────────────────────────────
+
+function TmplModal({ onClose, name, setName, onCreate }: {
+  onClose: () => void
+  name: string
+  setName: (v: string) => void
+  onCreate: () => Promise<void>
+}) {
+  const [saving, setSaving] = useState(false)
+  const [error, setError]   = useState("")
+
+  async function handle() {
+    if (!name.trim()) return
+    setSaving(true)
+    setError("")
+    try {
+      await onCreate()
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Error al crear la plantilla")
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/50 z-40 flex items-center justify-center px-4" onClick={onClose}>
+      <div className="w-full max-w-sm bg-zinc-900 border border-slate-700/40 rounded-2xl p-5"
+        onClick={e => e.stopPropagation()}>
+        <p className="text-sm font-semibold text-zinc-200 mb-3">Nueva plantilla</p>
+        <input
+          autoFocus value={name} onChange={e => setName(e.target.value)}
+          onKeyDown={e => e.key === "Enter" && handle()}
+          placeholder="Ej: Semana laboral"
+          className="w-full bg-zinc-800 border border-slate-700/40 rounded-xl px-3 py-2.5
+            text-sm text-zinc-200 outline-none focus:border-green-500/40"
+        />
+        {error && <p className="text-xs text-red-400 mt-2">{error}</p>}
+        <div className="flex gap-2 mt-4">
+          <button onClick={onClose}
+            className="flex-1 py-2.5 rounded-xl border border-slate-700/40 text-zinc-500 text-sm">
+            Cancelar
+          </button>
+          <button onClick={handle} disabled={saving || !name.trim()}
+            className="flex-1 py-2.5 rounded-xl bg-green-500 hover:bg-green-400 disabled:opacity-40
+              text-black text-sm font-semibold transition-colors">
+            {saving ? "…" : "Crear"}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ── Página principal ──────────────────────────────────────────────────────────
 
 export default function RoutinePage() {
@@ -763,36 +816,18 @@ export default function RoutinePage() {
 
       {/* ── Modal nueva plantilla ── */}
       {tmplModal && (
-        <div className="fixed inset-0 bg-black/70 z-40 flex items-center justify-center px-4" onClick={() => setTmplModal(false)}>
-          <div className="w-full max-w-sm bg-zinc-900 border border-slate-700/40 rounded-2xl p-5"
-            onClick={e => e.stopPropagation()}>
-            <p className="text-sm font-semibold text-zinc-200 mb-3">Nueva plantilla</p>
-            <input
-              autoFocus value={newTmplName} onChange={e => setNewTmplName(e.target.value)}
-              onKeyDown={e => { if (e.key === "Enter" && newTmplName.trim()) { createTemplate({ name: newTmplName.trim() }).then(() => { setNewTmplName(""); setTmplModal(false); load() }) }}}
-              placeholder="Ej: Semana laboral"
-              className="w-full bg-zinc-800 border border-slate-700/40 rounded-xl px-3 py-2.5
-                text-sm text-zinc-200 outline-none focus:border-green-500/40"
-            />
-            <div className="flex gap-2 mt-4">
-              <button onClick={() => setTmplModal(false)}
-                className="flex-1 py-2.5 rounded-xl border border-slate-700/40 text-zinc-500 text-sm">
-                Cancelar
-              </button>
-              <button
-                onClick={async () => {
-                  if (!newTmplName.trim()) return
-                  await createTemplate({ name: newTmplName.trim() })
-                  setNewTmplName("")
-                  setTmplModal(false)
-                  load()
-                }}
-                className="flex-1 py-2.5 rounded-xl bg-green-500 hover:bg-green-400 text-black text-sm font-semibold transition-colors">
-                Crear
-              </button>
-            </div>
-          </div>
-        </div>
+        <TmplModal
+          onClose={() => { setTmplModal(false); setNewTmplName("") }}
+          name={newTmplName}
+          setName={setNewTmplName}
+          onCreate={async () => {
+            if (!newTmplName.trim()) return
+            await createTemplate({ name: newTmplName.trim() })
+            setNewTmplName("")
+            setTmplModal(false)
+            load()
+          }}
+        />
       )}
     </div>
   )
