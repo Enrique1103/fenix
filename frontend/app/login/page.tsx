@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import Image from "next/image"
 import { supabase } from "@/lib/supabase"
@@ -13,6 +13,16 @@ export default function LoginPage() {
   const [error, setError]       = useState("")
   const [success, setSuccess]   = useState("")
   const router = useRouter()
+
+  useEffect(() => {
+    const html = document.documentElement
+    const prev = html.getAttribute("data-theme")
+    html.setAttribute("data-theme", "dark")
+    return () => {
+      if (prev) html.setAttribute("data-theme", prev)
+      else html.removeAttribute("data-theme")
+    }
+  }, [])
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
