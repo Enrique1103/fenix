@@ -425,8 +425,6 @@ export default function RoutinePage() {
         </button>
       </div>
 
-      )}
-
       {/* ── Timeline ── */}
       <div className="mx-4 mt-4">
         {loading ? (
