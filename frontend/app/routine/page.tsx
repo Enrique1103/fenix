@@ -3,7 +3,7 @@
 import { useEffect, useState, useRef, useCallback } from "react"
 import { ChevronLeft, ChevronRight, Plus, Check, ChevronDown, Pencil, Trash2, X } from "lucide-react"
 import {
-  getDayView,
+  getDayView, getTemplates, setDayOverride,
   createTemplate,
   createBlock, updateBlock, deleteBlock,
   createDayBlock, updateDayBlock, deleteDayBlock,
@@ -11,7 +11,7 @@ import {
   getCategories, createCategory,
   setRecord,
 } from "@/lib/api"
-import { RoutineBlock, RoutineDayBlock, RoutineDayView, RoutineCategory } from "@/lib/types"
+import { RoutineTemplate, RoutineBlock, RoutineDayBlock, RoutineDayView, RoutineCategory } from "@/lib/types"
 
 // ── Constantes ────────────────────────────────────────────────────────────────
 
@@ -528,6 +528,7 @@ function TmplModal({ onClose, name, setName, onCreate }: {
 export default function RoutinePage() {
   const [date, setDate]           = useState(new Date())
   const [dayView, setDayView]     = useState<RoutineDayView | null>(null)
+  const [templates, setTemplates] = useState<RoutineTemplate[]>([])
   const [categories, setCategories] = useState<RoutineCategory[]>([])
   const [loading, setLoading]     = useState(true)
   const [nowPx, setNowPx]         = useState(-1)
@@ -552,11 +553,13 @@ export default function RoutinePage() {
   const load = useCallback(async () => {
     setLoading(true)
     try {
-      const [view, cats] = await Promise.all([
+      const [view, tmpl, cats] = await Promise.all([
         getDayView(dateStr),
+        getTemplates(),
         getCategories(),
       ])
       setDayView(view)
+      setTemplates(tmpl)
       setCategories(cats)
     } finally { setLoading(false) }
   }, [dateStr])
@@ -666,6 +669,21 @@ export default function RoutinePage() {
           </div>
         </div>
 
+        {/* Plantillas */}
+        {templates.length > 0 && (
+          <div className="flex gap-2 overflow-x-auto pb-1">
+            {templates.map(t => (
+              <button key={t.id}
+                onClick={() => setDayOverride(dateStr, t.id).then(load)}
+                className={`flex-shrink-0 px-3 py-1 rounded-full text-xs border transition-all
+                  ${dayView?.template?.id === t.id
+                    ? "bg-green-500/12 border-green-500/25 text-green-400 font-semibold"
+                    : "bg-zinc-900/60 border-slate-700/40 text-zinc-500 hover:text-zinc-300"}`}>
+                {t.name}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* ── Navegador de día ── */}
