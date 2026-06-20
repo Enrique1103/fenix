@@ -425,21 +425,6 @@ export default function RoutinePage() {
         </button>
       </div>
 
-      {/* ── Hábitos del día ── */}
-      {dayView && dayView.habits.length > 0 && (
-        <div className="mx-4 mt-3 p-3 rounded-xl bg-zinc-900/60 border border-slate-700/30">
-          <p className="text-[10px] uppercase tracking-widest text-zinc-600 mb-2">Hábitos</p>
-          <div className="flex flex-wrap gap-1.5">
-            {dayView.habits.map(h => (
-              <span key={h.id} className={`text-xs px-2 py-1 rounded-full border transition-all
-                ${h.state === "done"   ? "bg-green-500/15 border-green-500/25 text-green-400" :
-                  h.state === "rest"   ? "bg-zinc-700/30 border-zinc-700/40 text-zinc-500" :
-                                         "bg-zinc-900/40 border-slate-700/30 text-zinc-600"}`}>
-                {h.state === "done" ? "✓ " : ""}{h.name}
-              </span>
-            ))}
-          </div>
-        </div>
       )}
 
       {/* ── Timeline ── */}
