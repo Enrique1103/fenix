@@ -286,7 +286,7 @@ export default function RoutinePage() {
   const [dayView, setDayView]     = useState<RoutineDayView | null>(null)
   const [categories, setCategories] = useState<RoutineCategory[]>([])
   const [loading, setLoading]     = useState(true)
-  const [nowPx, setNowPx]         = useState(nowTopPx())
+  const [nowPx, setNowPx]         = useState(-1)
 
   const [modal, setModal] = useState<{
     open: boolean
@@ -320,6 +320,7 @@ export default function RoutinePage() {
   useEffect(() => { load() }, [load])
 
   useEffect(() => {
+    setNowPx(nowTopPx())
     const id = setInterval(() => setNowPx(nowTopPx()), 30000)
     return () => clearInterval(id)
   }, [])
