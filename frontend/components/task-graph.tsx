@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, useMemo } from "react"
 import { Task } from "@/lib/types"
-import { X } from "lucide-react"
+import { X, Trash2 } from "lucide-react"
 
 const NODE_W         = 200
 const NODE_H         = 64
@@ -397,13 +397,14 @@ function GraphCanvas({ tasks, allTasks, storageKey, selectedNodeId, onNodeSelect
 
 // ── Public component ──────────────────────────────────────────────────────────
 
-export function TaskGraph({ tasks, allTasks, tab, onAddTask, onConnect, onDisconnect }: {
+export function TaskGraph({ tasks, allTasks, tab, onAddTask, onConnect, onDisconnect, onDelete }: {
   tasks: Task[]
   allTasks: Task[]
   tab: string
   onAddTask: (title: string, deadline: string, parentId?: number) => Promise<void>
   onConnect: (taskId: number, depId: number) => Promise<void>
   onDisconnect: (taskId: number, depId: number) => Promise<void>
+  onDelete: (taskId: number) => Promise<void>
 }) {
   const [selectedNodeId, setSelectedNodeId] = useState<number | null>(null)
   const [addingFor, setAddingFor]           = useState<Task | null>(null)
@@ -432,10 +433,21 @@ export function TaskGraph({ tasks, allTasks, tab, onAddTask, onConnect, onDiscon
         <div className="gc p-4 space-y-3">
           <div className="flex items-start justify-between gap-2">
             <p className="text-sm font-semibold text-zinc-100 leading-snug">{selectedTask.title}</p>
-            <button onClick={() => setSelectedNodeId(null)}
-              className="shrink-0 text-zinc-600 hover:text-zinc-400 transition-colors mt-0.5">
-              <X size={14}/>
-            </button>
+            <div className="flex items-center gap-2 shrink-0">
+              <button
+                onClick={async () => {
+                  await onDelete(selectedTask.id)
+                  setSelectedNodeId(null)
+                }}
+                className="text-zinc-600 hover:text-red-400 transition-colors mt-0.5"
+                title="Eliminar tarea">
+                <Trash2 size={14}/>
+              </button>
+              <button onClick={() => setSelectedNodeId(null)}
+                className="text-zinc-600 hover:text-zinc-400 transition-colors mt-0.5">
+                <X size={14}/>
+              </button>
+            </div>
           </div>
 
           {selectedTask.description ? (

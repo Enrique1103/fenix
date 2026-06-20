@@ -383,6 +383,7 @@ export default function TasksPage() {
               onAddTask={handleAddTask}
               onConnect={async (taskId, depId) => { await addTaskDep(taskId, depId); await load() }}
               onDisconnect={async (taskId, depId) => { await removeTaskDep(taskId, depId); await load() }}
+              onDelete={async (taskId) => { await deleteTask(taskId); await load() }}
             />
             {roots.length === 0 && (
               <div className="text-center py-12 text-zinc-600">
