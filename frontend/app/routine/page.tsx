@@ -20,7 +20,7 @@ const BASE_CATEGORIES = [
   { slug: "personal", label: "Personal", color: "#fb923c" },
 ]
 
-const HOURS = Array.from({ length: 18 }, (_, i) => i + 5) // 05:00 – 22:00
+const HOURS = Array.from({ length: 24 }, (_, i) => i) // 00:00 – 23:00
 const ROW_H = 80 // px por hora
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -41,7 +41,7 @@ function minutesToTime(m: number): string {
 }
 
 function blockTopPx(startTime: string): number {
-  return (timeToMinutes(startTime) - 5 * 60) / 60 * ROW_H
+  return timeToMinutes(startTime) / 60 * ROW_H
 }
 
 function blockHeightPx(startTime: string, endTime: string): number {
@@ -51,7 +51,7 @@ function blockHeightPx(startTime: string, endTime: string): number {
 
 function nowTopPx(): number {
   const now = new Date()
-  return (now.getHours() * 60 + now.getMinutes() - 5 * 60) / 60 * ROW_H
+  return (now.getHours() * 60 + now.getMinutes()) / 60 * ROW_H
 }
 
 // ── BlockModal ────────────────────────────────────────────────────────────────
@@ -343,7 +343,7 @@ export default function RoutinePage() {
     if (!d) return
     const dy = e.clientY - d.startY
     const deltaMins = Math.round((dy / ROW_H) * 60 / 15) * 15
-    const newStart = Math.max(5 * 60, Math.min(22 * 60 - d.duration, d.startMins + deltaMins))
+    const newStart = Math.max(0, Math.min(24 * 60 - d.duration, d.startMins + deltaMins))
     const el = document.getElementById(`block-${d.isDay ? "d" : "t"}-${d.blockId}`)
     if (el) el.style.top = `${blockTopPx(minutesToTime(newStart))}px`
   }
@@ -357,7 +357,7 @@ export default function RoutinePage() {
     const deltaMins = Math.round((dy / ROW_H) * 60 / 15) * 15
     if (Math.abs(deltaMins) < 15) return
 
-    const newStart = Math.max(5 * 60, Math.min(22 * 60 - d.duration, d.startMins + deltaMins))
+    const newStart = Math.max(0, Math.min(24 * 60 - d.duration, d.startMins + deltaMins))
     const newEnd = newStart + d.duration
 
     try {
