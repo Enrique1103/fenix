@@ -85,7 +85,7 @@ export interface RoutineBlock {
   category_label: string
   category_color: string
   habit_id: string | null
-  task_id: number | null
+  task_id?: number | null
   notes: string | null
   ord: number
   completed?: boolean
@@ -103,7 +103,7 @@ export interface RoutineDayBlock {
   category_label: string
   category_color: string
   habit_id: string | null
-  task_id: number | null
+  task_id?: number | null
   notes: string | null
   completed: boolean
 }
