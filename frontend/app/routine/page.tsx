@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useState, useRef, useCallback } from "react"
-import { ChevronLeft, ChevronRight, Plus, Check, Trash2, X } from "lucide-react"
+import { ChevronLeft, ChevronRight, Plus, Trash2, X } from "lucide-react"
 import {
   getDayView,
   createTemplate,
@@ -520,14 +520,6 @@ export default function RoutinePage() {
                         </div>
                       )}
                     </div>
-                    <button
-                      onPointerDown={e => e.stopPropagation()}
-                      onClick={() => handleComplete(block.id, block.isDay, done, block.habit_id)}
-                      className={`w-5 h-5 rounded-full border flex items-center justify-center flex-shrink-0
-                        mt-0.5 transition-all
-                        ${done ? "bg-green-500 border-green-500" : "border-slate-600 hover:border-green-500"}`}>
-                      {done && <Check size={10} className="text-white"/>}
-                    </button>
                   </div>
                 </div>
               )
