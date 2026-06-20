@@ -9,9 +9,9 @@ import {
   createDayBlock, updateDayBlock, deleteDayBlock,
   completeBlock,
   getCategories, createCategory,
-  setRecord,
+  setRecord, getTasks, updateTask, setBlockDayTask,
 } from "@/lib/api"
-import { RoutineTemplate, RoutineBlock, RoutineDayBlock, RoutineDayView, RoutineCategory } from "@/lib/types"
+import { RoutineTemplate, RoutineBlock, RoutineDayBlock, RoutineDayView, RoutineCategory, Task } from "@/lib/types"
 
 // ── Constantes ────────────────────────────────────────────────────────────────
 
@@ -231,6 +231,16 @@ function BlockModal({
   const [newCatColor, setNewCatColor]   = useState("#8b5cf6")
   const [activePicker, setActivePicker] = useState<"start" | "end" | null>(null)
   const [habitOpen, setHabitOpen]       = useState(false)
+  const [taskId, setTaskId]             = useState<number | null>(
+    (block as (RoutineBlock & { effective_task_id?: number | null }))?.effective_task_id
+    ?? (block as RoutineBlock)?.task_id
+    ?? null
+  )
+  const [tasks, setTasks]               = useState<Task[]>([])
+
+  useEffect(() => {
+    getTasks().then(t => setTasks(t.filter(tk => !tk.completed))).catch(() => {})
+  }, [])
 
   const allCategories = [
     ...baseCategories.map(c => ({ id: c.slug, label: c.label, color: c.color })),
@@ -259,7 +269,14 @@ function BlockModal({
         }
       } else {
         if (isDay) await updateDayBlock(block!.id!, data)
-        else await updateBlock(block!.id!, data)
+        else {
+          await updateBlock(block!.id!, data)
+          // Vincular tarea del día (solo para bloques de plantilla)
+          const prevTaskId = (block as RoutineBlock & { effective_task_id?: number | null })?.effective_task_id ?? (block as RoutineBlock)?.task_id ?? null
+          if (taskId !== prevTaskId) {
+            await setBlockDayTask(block!.id!, date, taskId)
+          }
+        }
       }
       onSave()
       onClose()
@@ -422,6 +439,25 @@ function BlockModal({
                 </div>
               )}
             </div>
+          </div>
+        )}
+
+        {/* Tarea del día (solo para bloques de plantilla en modo edición) */}
+        {!isDay && mode === "edit" && tasks.length > 0 && (
+          <div className="mb-3">
+            <label className="text-[10px] uppercase tracking-widest text-zinc-600 mb-1.5 block">
+              Tarea de hoy (opcional)
+            </label>
+            <select
+              className="w-full bg-zinc-800 border border-slate-700/40 rounded-xl px-3 py-2.5
+                text-sm text-zinc-300 outline-none focus:border-cyan-500/40"
+              value={taskId ?? ""}
+              onChange={e => setTaskId(e.target.value ? Number(e.target.value) : null)}>
+              <option value="">— Sin vincular —</option>
+              {tasks.map(t => (
+                <option key={t.id} value={t.id}>{t.title}</option>
+              ))}
+            </select>
           </div>
         )}
 
@@ -783,6 +819,12 @@ export default function RoutinePage() {
                             <span className="text-[9px] px-1.5 py-0.5 rounded-full
                               bg-cyan-500/10 text-cyan-400 border border-cyan-500/20">
                               ↔ hábito
+                            </span>
+                          )}
+                          {!block.isDay && (block as RoutineBlock & { task?: { id: number; title: string; completed: boolean } | null }).task && (
+                            <span className="text-[9px] px-1.5 py-0.5 rounded-full
+                              bg-violet-500/10 text-violet-400 border border-violet-500/20 max-w-[120px] truncate inline-block">
+                              ✓ {(block as RoutineBlock & { task?: { id: number; title: string; completed: boolean } | null }).task!.title}
                             </span>
                           )}
                         </div>

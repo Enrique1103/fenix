@@ -8,6 +8,7 @@ import { MONTHS, DAYS_SHORT, daysInMonth, firstWeekdayOffset, toISODate } from "
 import { HabitCell } from "@/components/habit-cell"
 import { MoodEmoji } from "@/components/mood-emoji"
 import { MonthlyEKGChart } from "@/components/monthly-ekg-chart"
+import { SuggestedTaskCard } from "@/components/suggested-task-card"
 import { diffClass } from "@/lib/color"
 
 type RecordMatrix = Record<string, Record<string, string>>
@@ -645,6 +646,7 @@ export default function HabitTrackerPage() {
         </div>
       ) : view === "weekly" ? (
         <div className="mt-6">
+        <div className="px-4 pb-1"><SuggestedTaskCard/></div>
         <WeeklyView
           weeks={weeks}
           habits={habits}

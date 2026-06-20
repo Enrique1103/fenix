@@ -33,6 +33,31 @@ class TaskUpdate(BaseModel):
     description: Optional[str] = None
 
 
+# ── Metas ─────────────────────────────────────────────────────────────────────
+
+class GoalCreate(BaseModel):
+    title: str
+    description: Optional[str] = None
+    commitment: Optional[str] = None
+    deadline: Optional[str] = None
+    image_url: Optional[str] = None
+    goal_type: str = "action"   # 'action' | 'mindset'
+    horizon: str = "long"        # 'short' | 'long'
+
+class GoalUpdate(BaseModel):
+    title: Optional[str] = None
+    description: Optional[str] = None
+    commitment: Optional[str] = None
+    deadline: Optional[str] = None
+    image_url: Optional[str] = None
+    goal_type: Optional[str] = None
+    horizon: Optional[str] = None
+    completed_at: Optional[str] = None
+
+class GoalDepCreate(BaseModel):
+    depends_on_goal_id: int
+
+
 # ── Rutina ────────────────────────────────────────────────────────────────────
 
 class TemplateCreate(BaseModel):
@@ -52,6 +77,7 @@ class BlockCreate(BaseModel):
     category_label: str
     category_color: str = "#6366f1"
     habit_id: Optional[str] = None
+    task_id: Optional[int] = None
     notes: Optional[str] = None
     ord: int = 0
 
@@ -63,6 +89,7 @@ class BlockUpdate(BaseModel):
     category_label: Optional[str] = None
     category_color: Optional[str] = None
     habit_id: Optional[str] = None
+    task_id: Optional[int] = None
     notes: Optional[str] = None
     ord: Optional[int] = None
 
@@ -79,6 +106,7 @@ class DayBlockCreate(BaseModel):
     category_label: str
     category_color: str = "#6366f1"
     habit_id: Optional[str] = None
+    task_id: Optional[int] = None
     notes: Optional[str] = None
 
 class DayBlockUpdate(BaseModel):
@@ -89,6 +117,7 @@ class DayBlockUpdate(BaseModel):
     category_label: Optional[str] = None
     category_color: Optional[str] = None
     habit_id: Optional[str] = None
+    task_id: Optional[int] = None
     notes: Optional[str] = None
     completed: Optional[bool] = None
 
@@ -100,3 +129,8 @@ class BlockCompletion(BaseModel):
 class DayOverride(BaseModel):
     date: str
     template_id: Optional[int] = None
+
+class BlockDayTaskSet(BaseModel):
+    block_id: int
+    date: str
+    task_id: Optional[int] = None

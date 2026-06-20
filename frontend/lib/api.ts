@@ -1,4 +1,4 @@
-import { Habit, DayRecords, MonthSummary, HabitMonthStats, Task, Goal, GoalProgress, Reminder, RoutineTemplate, RoutineBlock, RoutineDayBlock, RoutineCategory, RoutineDayView } from "./types"
+import { Habit, DayRecords, MonthSummary, HabitMonthStats, Task, Goal, GoalProgress, GoalsGraph, Reminder, RoutineTemplate, RoutineBlock, RoutineDayBlock, RoutineCategory, RoutineDayView } from "./types"
 import { supabase } from "./supabase"
 
 const BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000"
@@ -97,7 +97,11 @@ export const resetAll = (): Promise<void> =>
 export const getGoals = (): Promise<Goal[]> =>
   req("/goals")
 
-export const createGoal = (data: Omit<Goal, "id" | "created_at" | "habit_ids">): Promise<Goal> =>
+export const createGoal = (data: {
+  title: string; description?: string | null; commitment?: string | null;
+  deadline?: string | null; image_url?: string | null;
+  goal_type?: "action" | "mindset"; horizon?: "short" | "long"
+}): Promise<Goal> =>
   req("/goals", { method: "POST", body: JSON.stringify(data) })
 
 export const updateGoal = (id: number, data: Partial<Omit<Goal, "id" | "created_at" | "habit_ids">>): Promise<Goal> =>
@@ -114,6 +118,27 @@ export const detachHabit = (goalId: number, habitId: string): Promise<void> =>
 
 export const getGoalProgress = (goalId: number): Promise<GoalProgress> =>
   req(`/goals/${goalId}/progress`)
+
+export const getGoalDeps = (goalId: number): Promise<number[]> =>
+  req(`/goals/${goalId}/deps`)
+
+export const addGoalDep = (goalId: number, dependsOnGoalId: number): Promise<void> =>
+  req(`/goals/${goalId}/deps`, { method: "POST", body: JSON.stringify({ depends_on_goal_id: dependsOnGoalId }) })
+
+export const removeGoalDep = (goalId: number, depId: number): Promise<void> =>
+  req(`/goals/${goalId}/deps/${depId}`, { method: "DELETE" })
+
+export const getGoalsGraph = (): Promise<GoalsGraph> =>
+  req("/goals/graph")
+
+export const completeGoal = (goalId: number): Promise<Goal> =>
+  req(`/goals/${goalId}/complete`, { method: "POST" })
+
+export const reopenGoal = (goalId: number): Promise<Goal> =>
+  req(`/goals/${goalId}/reopen`, { method: "POST" })
+
+export const getCompletedGoals = (): Promise<Goal[]> =>
+  req("/goals/achievements")
 
 // ── Tasks ─────────────────────────────────────────────────────────────────────
 
@@ -254,6 +279,9 @@ export const deleteDayBlock = (id: number): Promise<void> =>
 export const completeBlock = (blockId: number, date: string, completed: boolean): Promise<{ ok: boolean }> =>
   req("/routine/complete", { method: "POST", body: JSON.stringify({ block_id: blockId, date, completed }) })
 
+export const setBlockDayTask = (blockId: number, date: string, taskId: number | null): Promise<{ ok: boolean }> =>
+  req("/routine/blocks/day-task", { method: "POST", body: JSON.stringify({ block_id: blockId, date, task_id: taskId }) })
+
 // ── Reminders ─────────────────────────────────────────────────────────────────
 
 export const getReminders = (): Promise<Reminder[]> =>
@@ -267,3 +295,13 @@ export const updateReminder = (id: number, data: Partial<Omit<Reminder, "id" | "
 
 export const deleteReminder = (id: number): Promise<void> =>
   req(`/reminders/${id}`, { method: "DELETE" })
+
+// ── Sugerencia de tarea ───────────────────────────────────────────────────────
+
+export interface SuggestedTask {
+  task: Task | null
+  reason: string | null
+}
+
+export const getSuggestedTask = (): Promise<SuggestedTask> =>
+  req("/tasks/suggested")

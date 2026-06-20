@@ -104,3 +104,66 @@ def add_dep(task_id: int, dep_id: int, user_id: str = Depends(get_user_id)):
 def remove_dep(task_id: int, dep_id: int, user_id: str = Depends(get_user_id)):
     db = get_db()
     db.table("task_deps").delete().eq("task_id", task_id).eq("depends_on_task_id", dep_id).execute()
+
+
+@router.get("/suggested")
+def get_suggested_task(user_id: str = Depends(get_user_id)):
+    from datetime import date as date_type
+    db = get_db()
+
+    tasks_res = db.table("tasks").select("*").eq("user_id", user_id).eq("completed", False).execute()
+    tasks = tasks_res.data
+    if not tasks:
+        return {"task": None, "reason": None}
+
+    deps_res = db.table("task_deps").select("task_id, depends_on_task_id").execute()
+    blocks_count: dict[int, int] = {}
+    for d in deps_res.data:
+        dep_id = d["depends_on_task_id"]
+        blocks_count[dep_id] = blocks_count.get(dep_id, 0) + 1
+
+    today = date_type.today()
+    scored = []
+
+    for t in tasks:
+        score = 0
+        reasons = []
+
+        if t.get("deadline"):
+            deadline = date_type.fromisoformat(t["deadline"])
+            days_left = (deadline - today).days
+            if days_left < 0:
+                score += 100
+                reasons.append(f"venció hace {abs(days_left)} día(s)")
+            elif days_left == 0:
+                score += 90
+                reasons.append("vence hoy")
+            elif days_left <= 3:
+                score += 70 - days_left * 5
+                reasons.append(f"vence en {days_left} día(s)")
+            elif days_left <= 7:
+                score += 30
+                reasons.append(f"vence en {days_left} días")
+
+        created = date_type.fromisoformat(str(t["created_at"])[:10])
+        age_days = (today - created).days
+        if age_days >= 14:
+            score += 25
+            reasons.append(f"está pendiente desde hace {age_days} días")
+        elif age_days >= 7:
+            score += 10
+
+        unblocks = blocks_count.get(t["id"], 0)
+        if unblocks > 0:
+            score += unblocks * 15
+            reasons.append(f"desbloquea {unblocks} tarea(s) más")
+
+        if score > 0:
+            scored.append((score, t, reasons))
+
+    if not scored:
+        return {"task": None, "reason": None}
+
+    scored.sort(key=lambda x: x[0], reverse=True)
+    best_score, best_task, best_reasons = scored[0]
+    return {"task": best_task, "reason": " · ".join(best_reasons[:2])}

@@ -31,14 +31,18 @@ export interface Goal {
   image_url: string | null
   created_at: string
   habit_ids: string[]
+  goal_type: "action" | "mindset"
+  horizon: "short" | "long"
+  completed_at: string | null
 }
 
-export interface GoalProgress {
-  pct: number
-  perfect_days: number
-  active_days: number
-  streak_current: number
-  streak_best: number
+export type GoalProgress =
+  | { goal_type: "action"; pct: number; perfect_days: number; active_days: number; streak_current: number; streak_best: number }
+  | { goal_type: "mindset"; streak_current: number; streak_best: number }
+
+export interface GoalsGraph {
+  goals: Goal[]
+  deps: { goal_id: number; depends_on_goal_id: number }[]
 }
 
 export interface Reminder {
@@ -81,9 +85,12 @@ export interface RoutineBlock {
   category_label: string
   category_color: string
   habit_id: string | null
+  task_id: number | null
   notes: string | null
   ord: number
   completed?: boolean
+  effective_task_id?: number | null
+  task?: { id: number; title: string; completed: boolean } | null
 }
 
 export interface RoutineDayBlock {
@@ -96,6 +103,7 @@ export interface RoutineDayBlock {
   category_label: string
   category_color: string
   habit_id: string | null
+  task_id: number | null
   notes: string | null
   completed: boolean
 }

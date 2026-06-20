@@ -1,0 +1,239 @@
+"use client"
+
+import { useState, useEffect, useRef, useCallback } from "react"
+import { Check, Pencil, Trash2, X, Plus } from "lucide-react"
+import { Goal } from "@/lib/types"
+import { getGoalsGraph, addGoalDep, removeGoalDep } from "@/lib/api"
+
+const STORAGE_KEY = "fenix_goal_graph_positions"
+
+interface Pos { x: number; y: number }
+
+function nodeColor(goal: Goal) {
+  return goal.goal_type === "action"
+    ? { bg: "rgba(251,146,60,0.12)", border: "#f97316", text: "#fb923c" }
+    : { bg: "rgba(148,163,184,0.10)", border: "#64748b", text: "#94a3b8" }
+}
+
+export function GoalGraph({ goals, onEdit, onComplete, onDelete }: {
+  goals:      Goal[]
+  onEdit:     (g: Goal) => void
+  onComplete: (id: number) => void
+  onDelete:   (id: number) => void
+}) {
+  const [deps, setDeps]         = useState<{ goal_id: number; depends_on_goal_id: number }[]>([])
+  const [positions, setPositions] = useState<Record<number, Pos>>({})
+  const [selected, setSelected]  = useState<number | null>(null)
+  const [connectFrom, setConnectFrom] = useState<number | null>(null)
+  const containerRef = useRef<HTMLDivElement>(null)
+  const dragRef = useRef<{ id: number; ox: number; oy: number; sx: number; sy: number } | null>(null)
+
+  const loadGraph = useCallback(async () => {
+    try {
+      const data = await getGoalsGraph()
+      setDeps(data.deps)
+    } catch { /* ignore */ }
+  }, [])
+
+  useEffect(() => {
+    loadGraph()
+  }, [loadGraph])
+
+  // Initialize / restore positions
+  useEffect(() => {
+    if (goals.length === 0) return
+    const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? "{}")
+    const next: Record<number, Pos> = {}
+    goals.forEach((g, i) => {
+      next[g.id] = saved[g.id] ?? { x: 40 + (i % 3) * 200, y: 40 + Math.floor(i / 3) * 140 }
+    })
+    setPositions(next)
+  }, [goals])
+
+  function savePositions(pos: Record<number, Pos>) {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(pos))
+    setPositions(pos)
+  }
+
+  function onPointerDown(e: React.PointerEvent, id: number) {
+    if (connectFrom !== null) return
+    e.currentTarget.setPointerCapture(e.pointerId)
+    dragRef.current = {
+      id,
+      ox: positions[id]?.x ?? 0,
+      oy: positions[id]?.y ?? 0,
+      sx: e.clientX,
+      sy: e.clientY,
+    }
+  }
+
+  function onPointerMove(e: React.PointerEvent) {
+    const d = dragRef.current
+    if (!d) return
+    const dx = e.clientX - d.sx
+    const dy = e.clientY - d.sy
+    setPositions(prev => ({ ...prev, [d.id]: { x: d.ox + dx, y: d.oy + dy } }))
+  }
+
+  function onPointerUp(e: React.PointerEvent) {
+    const d = dragRef.current
+    if (!d) return
+    const dx = e.clientX - d.sx
+    const dy = e.clientY - d.sy
+    const next = { ...positions, [d.id]: { x: d.ox + dx, y: d.oy + dy } }
+    savePositions(next)
+    dragRef.current = null
+  }
+
+  async function handleNodeClick(id: number) {
+    if (connectFrom !== null) {
+      if (connectFrom !== id) {
+        await addGoalDep(id, connectFrom)
+        await loadGraph()
+      }
+      setConnectFrom(null)
+      return
+    }
+    setSelected(id === selected ? null : id)
+  }
+
+  async function handleDisconnect(goalId: number, depId: number) {
+    await removeGoalDep(goalId, depId)
+    await loadGraph()
+  }
+
+  const NODE_W = 160
+  const NODE_H = 56
+
+  const selectedGoal = goals.find(g => g.id === selected)
+
+  return (
+    <div className="relative">
+      {connectFrom !== null && (
+        <div className="mb-3 px-3 py-2 rounded-xl bg-cyan-500/10 border border-cyan-500/25 text-xs text-cyan-400 flex items-center justify-between">
+          <span>Haz clic en otra meta para crear la dependencia</span>
+          <button onClick={() => setConnectFrom(null)}><X size={13}/></button>
+        </div>
+      )}
+
+      <div
+        ref={containerRef}
+        className="relative w-full overflow-auto rounded-2xl bg-zinc-900/40 border border-slate-700/30"
+        style={{ height: 520 }}
+        onPointerMove={onPointerMove}
+        onPointerUp={onPointerUp}
+      >
+        {/* SVG arrows */}
+        <svg className="absolute inset-0 pointer-events-none" style={{ width: "100%", height: "100%" }}>
+          <defs>
+            <marker id="arrow" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+              <path d="M0,0 L0,6 L8,3 z" fill="#475569"/>
+            </marker>
+          </defs>
+          {deps.map(dep => {
+            const from = positions[dep.depends_on_goal_id]
+            const to   = positions[dep.goal_id]
+            if (!from || !to) return null
+            const x1 = from.x + NODE_W / 2
+            const y1 = from.y + NODE_H
+            const x2 = to.x + NODE_W / 2
+            const y2 = to.y
+            return (
+              <line key={`${dep.goal_id}-${dep.depends_on_goal_id}`}
+                x1={x1} y1={y1} x2={x2} y2={y2}
+                stroke="#475569" strokeWidth={1.5} markerEnd="url(#arrow)"
+                strokeDasharray="4 3"/>
+            )
+          })}
+        </svg>
+
+        {/* Nodes */}
+        {goals.map(goal => {
+          const pos = positions[goal.id]
+          if (!pos) return null
+          const { bg, border, text } = nodeColor(goal)
+          const isSel = selected === goal.id
+          return (
+            <div
+              key={goal.id}
+              className="absolute select-none touch-none cursor-pointer rounded-xl px-3 py-2.5 transition-shadow"
+              style={{
+                left: pos.x, top: pos.y,
+                width: NODE_W, height: NODE_H,
+                background: bg,
+                border: `1.5px solid ${isSel ? "#22c55e" : border}`,
+                boxShadow: isSel ? "0 0 0 2px rgba(34,197,94,0.2)" : "none",
+              }}
+              onPointerDown={e => onPointerDown(e, goal.id)}
+              onClick={() => handleNodeClick(goal.id)}
+            >
+              <p className="text-xs font-semibold leading-tight truncate" style={{ color: text }}>
+                {goal.title}
+              </p>
+              <p className="text-[9px] text-zinc-600 mt-0.5 truncate">
+                {goal.goal_type === "action" ? "Acción" : "Mentalización"} · {goal.horizon === "short" ? "Corto" : "Largo"}
+              </p>
+
+              {/* Connect button */}
+              <button
+                className="absolute top-1.5 right-1.5 w-4 h-4 rounded-full bg-zinc-700/60 flex items-center justify-center hover:bg-cyan-500/20 transition-colors"
+                onPointerDown={e => e.stopPropagation()}
+                onClick={e => { e.stopPropagation(); setConnectFrom(goal.id); setSelected(null) }}>
+                <Plus size={8} className="text-zinc-400"/>
+              </button>
+            </div>
+          )
+        })}
+      </div>
+
+      {/* Selected panel */}
+      {selectedGoal && (
+        <div className="mt-3 gc p-4 space-y-3">
+          <div className="flex items-start justify-between gap-2">
+            <p className="text-sm font-semibold text-zinc-100">{selectedGoal.title}</p>
+            <button onClick={() => setSelected(null)} className="text-zinc-600 hover:text-zinc-400">
+              <X size={14}/>
+            </button>
+          </div>
+
+          {/* Dependencies from this node */}
+          {deps.filter(d => d.goal_id === selected).length > 0 && (
+            <div>
+              <p className="text-[10px] text-zinc-600 mb-1.5">Depende de:</p>
+              <div className="space-y-1">
+                {deps.filter(d => d.goal_id === selected).map(dep => {
+                  const depGoal = goals.find(g => g.id === dep.depends_on_goal_id)
+                  return depGoal ? (
+                    <div key={dep.depends_on_goal_id} className="flex items-center justify-between
+                      px-2.5 py-1.5 rounded-lg bg-zinc-800/60 text-xs text-zinc-400">
+                      <span>{depGoal.title}</span>
+                      <button onClick={() => handleDisconnect(selected!, dep.depends_on_goal_id)}
+                        className="text-zinc-600 hover:text-red-400 transition-colors">
+                        <X size={11}/>
+                      </button>
+                    </div>
+                  ) : null
+                })}
+              </div>
+            </div>
+          )}
+
+          <div className="flex gap-2">
+            <button onClick={() => { onEdit(selectedGoal); setSelected(null) }}
+              className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-zinc-800 text-xs text-zinc-400 hover:text-zinc-200">
+              <Pencil size={11}/> Editar
+            </button>
+            <button onClick={() => { onComplete(selectedGoal.id); setSelected(null) }}
+              className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-green-500/10 text-xs text-green-400 border border-green-500/20">
+              <Check size={11}/> Logro
+            </button>
+            <button onClick={() => { onDelete(selectedGoal.id); setSelected(null) }}
+              className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-red-500/10 text-xs text-red-400 border border-red-500/20">
+              <Trash2 size={11}/> Eliminar
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
