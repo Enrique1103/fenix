@@ -564,10 +564,9 @@ export default function RoutinePage() {
 
       {/* ── Modal nueva plantilla ── */}
       {tmplModal && (
-        <div className="fixed inset-0 bg-black/70 z-40 flex items-end" onClick={() => setTmplModal(false)}>
-          <div className="w-full max-w-lg mx-auto bg-zinc-900 border-t border-slate-700/40 rounded-t-2xl p-5"
+        <div className="fixed inset-0 bg-black/70 z-40 flex items-center justify-center px-4" onClick={() => setTmplModal(false)}>
+          <div className="w-full max-w-sm bg-zinc-900 border border-slate-700/40 rounded-2xl p-5"
             onClick={e => e.stopPropagation()}>
-            <div className="w-9 h-1 bg-zinc-700 rounded mx-auto mb-4"/>
             <p className="text-sm font-semibold text-zinc-200 mb-3">Nueva plantilla</p>
             <input
               autoFocus value={newTmplName} onChange={e => setNewTmplName(e.target.value)}
