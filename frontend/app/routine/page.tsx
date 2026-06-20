@@ -540,9 +540,8 @@ export default function RoutinePage() {
     block: Partial<RoutineBlock & RoutineDayBlock> | null
   }>({ open: false, mode: "create", isDay: true, block: null })
 
-  const [tmplModal, setTmplModal]         = useState(false)
-  const [newTmplName, setNewTmplName]     = useState("")
-  const [tmplMenu, setTmplMenu]           = useState<RoutineTemplate | null>(null)
+  const [tmplModal, setTmplModal]     = useState(false)
+  const [newTmplName, setNewTmplName] = useState("")
 
   const dragRef = useRef<{
     blockId: number; isDay: boolean
@@ -674,14 +673,19 @@ export default function RoutinePage() {
         {templates.length > 0 && (
           <div className="flex gap-2 overflow-x-auto pb-1">
             {templates.map(t => (
-              <button key={t.id}
-                onClick={() => setTmplMenu(t)}
-                className={`flex-shrink-0 px-3 py-1 rounded-full text-xs border transition-all
-                  ${dayView?.template?.id === t.id
-                    ? "bg-green-500/12 border-green-500/25 text-green-400 font-semibold"
-                    : "bg-zinc-900/60 border-slate-700/40 text-zinc-500 hover:text-zinc-300"}`}>
-                {t.name}
-              </button>
+              <div key={t.id} className={`flex-shrink-0 flex items-center gap-1 pl-3 pr-2 py-1 rounded-full text-xs border transition-all
+                ${dayView?.template?.id === t.id
+                  ? "bg-green-500/12 border-green-500/25 text-green-400 font-semibold"
+                  : "bg-zinc-900/60 border-slate-700/40 text-zinc-500"}`}>
+                <button onClick={() => setDayOverride(dateStr, t.id).then(load)}>
+                  {t.name}
+                </button>
+                <button
+                  onClick={() => deleteTemplate(t.id).then(load)}
+                  className="ml-0.5 text-zinc-600 hover:text-red-400 transition-colors leading-none">
+                  ×
+                </button>
+              </div>
             ))}
           </div>
         )}
@@ -833,42 +837,6 @@ export default function RoutinePage() {
             setCategories(cats)
           }}
         />
-      )}
-
-      {/* ── Modal gestión plantilla ── */}
-      {tmplMenu && (
-        <div className="fixed inset-0 bg-black/50 z-40 flex items-center justify-center px-4"
-          onClick={() => setTmplMenu(null)}>
-          <div className="w-full max-w-xs bg-zinc-900 border border-slate-700/40 rounded-2xl overflow-hidden"
-            onClick={e => e.stopPropagation()}>
-            <p className="text-xs uppercase tracking-widest text-zinc-500 px-4 pt-4 pb-2">
-              {tmplMenu.name}
-            </p>
-            <button
-              onClick={async () => {
-                await setDayOverride(dateStr, tmplMenu.id)
-                setTmplMenu(null)
-                load()
-              }}
-              className="w-full px-4 py-3 text-sm text-zinc-200 text-left hover:bg-zinc-800 transition-colors border-t border-slate-700/30">
-              Usar hoy
-            </button>
-            <button
-              onClick={async () => {
-                await deleteTemplate(tmplMenu.id)
-                setTmplMenu(null)
-                load()
-              }}
-              className="w-full px-4 py-3 text-sm text-red-400 text-left hover:bg-zinc-800 transition-colors border-t border-slate-700/30">
-              Eliminar plantilla
-            </button>
-            <button
-              onClick={() => setTmplMenu(null)}
-              className="w-full px-4 py-3 text-sm text-zinc-500 text-left hover:bg-zinc-800 transition-colors border-t border-slate-700/30">
-              Cancelar
-            </button>
-          </div>
-        </div>
       )}
 
       {/* ── Modal nueva plantilla ── */}
