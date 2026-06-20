@@ -573,7 +573,9 @@ export default function RoutinePage() {
   function nextDay() { setDate(d => { const n = new Date(d); n.setDate(n.getDate() + 1); return n }) }
   function goToday() { setDate(new Date()) }
 
-  const isToday = toISODate(date) === toISODate(new Date())
+  const [mounted, setMounted] = useState(false)
+  useEffect(() => setMounted(true), [])
+  const isToday = mounted && toISODate(date) === toISODate(new Date())
 
   // ── Drag para mover bloques ───────────────────────────────────────────────
 
@@ -672,7 +674,7 @@ export default function RoutinePage() {
           <ChevronLeft size={18}/>
         </button>
         <button onClick={goToday} className="text-center">
-          <p className="text-sm font-semibold text-zinc-200">
+          <p className="text-sm font-semibold text-zinc-200" suppressHydrationWarning>
             {isToday && <span className="text-green-400">Hoy · </span>}
             {date.toLocaleDateString("es-UY", { weekday: "long", day: "numeric", month: "long" })}
           </p>
