@@ -3,15 +3,14 @@
 import { useEffect, useState, useRef, useCallback } from "react"
 import { ChevronLeft, ChevronRight, Plus, Check, Trash2, X } from "lucide-react"
 import {
-  getTemplates, createTemplate, deleteTemplate,
-  getDayView, setDayOverride,
+  getDayView,
   createBlock, updateBlock, deleteBlock,
   createDayBlock, updateDayBlock, deleteDayBlock,
   completeBlock,
   getCategories, createCategory,
   setRecord,
 } from "@/lib/api"
-import { RoutineTemplate, RoutineBlock, RoutineDayBlock, RoutineDayView, RoutineCategory } from "@/lib/types"
+import { RoutineBlock, RoutineDayBlock, RoutineDayView, RoutineCategory } from "@/lib/types"
 
 // ── Constantes ────────────────────────────────────────────────────────────────
 
@@ -284,7 +283,6 @@ function BlockModal({
 export default function RoutinePage() {
   const [date, setDate]           = useState(new Date())
   const [dayView, setDayView]     = useState<RoutineDayView | null>(null)
-  const [templates, setTemplates] = useState<RoutineTemplate[]>([])
   const [categories, setCategories] = useState<RoutineCategory[]>([])
   const [loading, setLoading]     = useState(true)
   const [nowPx, setNowPx]         = useState(nowTopPx())
@@ -296,9 +294,6 @@ export default function RoutinePage() {
     block: Partial<RoutineBlock & RoutineDayBlock> | null
   }>({ open: false, mode: "create", isDay: true, block: null })
 
-  const [tmplModal, setTmplModal]   = useState(false)
-  const [newTmplName, setNewTmplName] = useState("")
-
   const dragRef = useRef<{
     blockId: number; isDay: boolean
     startY: number; startMins: number; duration: number
@@ -309,13 +304,11 @@ export default function RoutinePage() {
   const load = useCallback(async () => {
     setLoading(true)
     try {
-      const [view, tmpl, cats] = await Promise.all([
+      const [view, cats] = await Promise.all([
         getDayView(dateStr),
-        getTemplates(),
         getCategories(),
       ])
       setDayView(view)
-      setTemplates(tmpl)
       setCategories(cats)
     } finally { setLoading(false) }
   }, [dateStr])
@@ -414,24 +407,6 @@ export default function RoutinePage() {
           </button>
         </div>
 
-        {/* Plantillas */}
-        <div className="flex gap-2 overflow-x-auto pb-1">
-          {templates.map(t => (
-            <button key={t.id}
-              onClick={() => setDayOverride(dateStr, t.id).then(load)}
-              className={`flex-shrink-0 px-3 py-1 rounded-full text-xs border transition-all
-                ${dayView?.template?.id === t.id
-                  ? "bg-green-500/12 border-green-500/25 text-green-400 font-semibold"
-                  : "bg-zinc-900/60 border-slate-700/40 text-zinc-500 hover:text-zinc-300"}`}>
-              {t.name}
-            </button>
-          ))}
-          <button onClick={() => setTmplModal(true)}
-            className="flex-shrink-0 px-3 py-1 rounded-full text-xs border border-dashed
-              border-slate-700/40 text-zinc-600 hover:text-zinc-400 transition-colors">
-            + Plantilla
-          </button>
-        </div>
       </div>
 
       {/* ── Navegador de día ── */}
@@ -444,9 +419,6 @@ export default function RoutinePage() {
             {isToday && <span className="text-green-400">Hoy · </span>}
             {date.toLocaleDateString("es-UY", { weekday: "long", day: "numeric", month: "long" })}
           </p>
-          {dayView?.template && (
-            <p className="text-[10px] text-zinc-600 mt-0.5">Plantilla: {dayView.template.name}</p>
-          )}
         </button>
         <button onClick={nextDay} className="p-2 rounded-lg hover:bg-zinc-800 text-zinc-500 transition-colors">
           <ChevronRight size={18}/>
@@ -595,40 +567,6 @@ export default function RoutinePage() {
         />
       )}
 
-      {/* ── Modal nueva plantilla ── */}
-      {tmplModal && (
-        <div className="fixed inset-0 bg-black/70 z-40 flex items-end" onClick={() => setTmplModal(false)}>
-          <div className="w-full max-w-lg mx-auto bg-zinc-900 border-t border-slate-700/40 rounded-t-2xl p-5"
-            onClick={e => e.stopPropagation()}>
-            <div className="w-9 h-1 bg-zinc-700 rounded mx-auto mb-4"/>
-            <p className="text-sm font-semibold text-zinc-200 mb-3">Nueva plantilla</p>
-            <input
-              autoFocus value={newTmplName} onChange={e => setNewTmplName(e.target.value)}
-              onKeyDown={e => { if (e.key === "Enter" && newTmplName.trim()) { createTemplate({ name: newTmplName.trim() }).then(() => { setNewTmplName(""); setTmplModal(false); load() }) }}}
-              placeholder="Ej: Semana laboral"
-              className="w-full bg-zinc-800 border border-slate-700/40 rounded-xl px-3 py-2.5
-                text-sm text-zinc-200 outline-none focus:border-green-500/40"
-            />
-            <div className="flex gap-2 mt-4">
-              <button onClick={() => setTmplModal(false)}
-                className="flex-1 py-2.5 rounded-xl border border-slate-700/40 text-zinc-500 text-sm">
-                Cancelar
-              </button>
-              <button
-                onClick={async () => {
-                  if (!newTmplName.trim()) return
-                  await createTemplate({ name: newTmplName.trim() })
-                  setNewTmplName("")
-                  setTmplModal(false)
-                  load()
-                }}
-                className="flex-1 py-2.5 rounded-xl bg-green-500 hover:bg-green-400 text-black text-sm font-semibold transition-colors">
-                Crear
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   )
 }
