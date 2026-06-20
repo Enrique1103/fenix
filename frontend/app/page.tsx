@@ -1,8 +1,8 @@
 "use client"
 
 import { useState, useEffect, useCallback } from "react"
-import { ChevronLeft, ChevronRight, Flame, TrendingUp, TrendingDown } from "lucide-react"
-import { getHabits, getMonthAll, setRecord, getMonthSummary, getMonthMood, setMood, getStreak } from "@/lib/api"
+import { ChevronLeft, ChevronRight, Flame, TrendingUp, TrendingDown, Plus, Pencil, Trash2, Check, X } from "lucide-react"
+import { getHabits, getMonthAll, setRecord, getMonthSummary, getMonthMood, setMood, getStreak, createHabit, updateHabit, deleteHabit } from "@/lib/api"
 import { Habit } from "@/lib/types"
 import { MONTHS, DAYS_SHORT, daysInMonth, firstWeekdayOffset, toISODate } from "@/lib/utils"
 import { HabitCell } from "@/components/habit-cell"
@@ -309,6 +309,110 @@ function MonthlyView({
   )
 }
 
+// ── Habit Manager Modal ───────────────────────────────────────────────────────
+
+function HabitManagerModal({
+  habits, onClose, onAdd, onRename, onDelete,
+}: {
+  habits: Habit[]
+  onClose: () => void
+  onAdd: (name: string) => Promise<void>
+  onRename: (id: string, name: string) => Promise<void>
+  onDelete: (id: string) => Promise<void>
+}) {
+  const [newName, setNewName] = useState("")
+  const [apiError, setApiError] = useState("")
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [editName, setEditName] = useState("")
+
+  async function handleAdd() {
+    if (!newName.trim()) return
+    setApiError("")
+    try {
+      await onAdd(newName.trim())
+      setNewName("")
+    } catch (e) {
+      setApiError(e instanceof Error ? e.message : "Error")
+    }
+  }
+
+  async function handleRename(id: string) {
+    if (!editName.trim()) return
+    await onRename(id, editName.trim())
+    setEditingId(null)
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 px-4">
+      <div className="gc w-full max-w-sm overflow-hidden">
+        <div className="flex items-center justify-between px-4 py-3 border-b border-slate-700/40">
+          <h2 className="font-semibold text-sm">Gestionar Hábitos</h2>
+          <button onClick={onClose} className="text-zinc-500 hover:text-zinc-300 transition-colors">
+            <X size={18}/>
+          </button>
+        </div>
+
+        <div className="px-4 py-3 border-b border-slate-700/40">
+          <div className="flex items-center gap-2">
+            <input
+              autoFocus
+              value={newName}
+              onChange={e => setNewName(e.target.value)}
+              onKeyDown={e => { if (e.key === "Enter") handleAdd() }}
+              placeholder="Nuevo hábito..."
+              className="flex-1 bg-zinc-800 rounded-xl px-3 py-2 text-sm outline-none placeholder-zinc-500 focus:ring-1 focus:ring-green-500/50"
+            />
+            <button
+              onClick={handleAdd}
+              disabled={!newName.trim()}
+              className="w-9 h-9 bg-green-500 hover:bg-green-400 disabled:opacity-30 rounded-xl flex items-center justify-center transition-colors shrink-0"
+            >
+              <Plus size={16} className="text-black"/>
+            </button>
+          </div>
+          {apiError && <p className="text-xs text-red-400 mt-1.5">{apiError}</p>}
+        </div>
+
+        <div className="max-h-64 overflow-y-auto">
+          {habits.length === 0 ? (
+            <p className="text-center text-zinc-500 text-sm py-6">Sin hábitos aún</p>
+          ) : (
+            habits.map((h, idx) => (
+              <div key={h.id} className={`flex items-center gap-2 px-4 py-2.5 ${idx < habits.length - 1 ? "border-b border-slate-700/25" : ""}`}>
+                {editingId === h.id ? (
+                  <>
+                    <input
+                      autoFocus
+                      value={editName}
+                      onChange={e => setEditName(e.target.value)}
+                      onKeyDown={e => { if (e.key === "Enter") handleRename(h.id); if (e.key === "Escape") setEditingId(null) }}
+                      className="flex-1 bg-zinc-800 rounded-lg px-2 py-1 text-sm outline-none"
+                    />
+                    <button onClick={() => handleRename(h.id)} className="text-green-400 p-1"><Check size={15}/></button>
+                    <button onClick={() => setEditingId(null)} className="text-zinc-500 p-1"><X size={15}/></button>
+                  </>
+                ) : (
+                  <>
+                    <span className="flex-1 text-sm text-zinc-200">{h.name}</span>
+                    <button onClick={() => { setEditingId(h.id); setEditName(h.name) }}
+                      className="text-zinc-500 hover:text-zinc-300 p-1 transition-colors">
+                      <Pencil size={14}/>
+                    </button>
+                    <button onClick={() => onDelete(h.id)}
+                      className="text-zinc-500 hover:text-red-400 p-1 transition-colors">
+                      <Trash2 size={14}/>
+                    </button>
+                  </>
+                )}
+              </div>
+            ))
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ── Page ─────────────────────────────────────────────────────────────────────
 
 export default function HabitTrackerPage() {
@@ -326,6 +430,7 @@ export default function HabitTrackerPage() {
   const [view, setView] = useState<"weekly" | "monthly">("weekly")
   const [moodMap, setMoodMap] = useState<Record<string, number>>({})
   const [picker, setPicker] = useState<string | null>(null)
+  const [habitModal, setHabitModal] = useState(false)
 
   // Auto-detecta vista según ancho. Se actualiza al redimensionar.
   useEffect(() => {
@@ -395,6 +500,21 @@ export default function HabitTrackerPage() {
       console.error("Error guardando registro:", err)
       load()
     }
+  }
+
+  async function handleAddHabit(name: string) {
+    await createHabit(name)
+    await load()
+  }
+
+  async function handleRenameHabit(id: string, name: string) {
+    await updateHabit(id, { name })
+    await load()
+  }
+
+  async function handleDeleteHabit(id: string) {
+    await deleteHabit(id)
+    await load()
   }
 
   function openMoodPicker(date: string, e: React.MouseEvent) {
@@ -516,7 +636,12 @@ export default function HabitTrackerPage() {
       ) : habits.length === 0 ? (
         <div className="text-center text-zinc-500 mt-20 px-6">
           <p className="text-lg">Sin hábitos configurados</p>
-          <p className="text-sm mt-1">Ve a Ajustes para agregar tus hábitos</p>
+          <button
+            onClick={() => setHabitModal(true)}
+            className="mt-3 flex items-center gap-1.5 mx-auto text-sm text-green-400 hover:text-green-300 transition-colors"
+          >
+            <Plus size={15}/> Crear primer hábito
+          </button>
         </div>
       ) : view === "weekly" ? (
         <div className="mt-6">
@@ -549,10 +674,28 @@ export default function HabitTrackerPage() {
 
       <div className="pb-10"/>
 
+      {/* FAB */}
+      <button
+        onClick={() => setHabitModal(true)}
+        className="fixed bottom-24 right-4 w-12 h-12 bg-green-500 hover:bg-green-400 active:scale-95 rounded-full flex items-center justify-center shadow-lg shadow-green-500/25 z-30 transition-all"
+      >
+        <Plus size={20} className="text-black"/>
+      </button>
+
       {picker && (
         <MoodPicker
           onSelect={handleMoodSelect}
           onClose={() => setPicker(null)}
+        />
+      )}
+
+      {habitModal && (
+        <HabitManagerModal
+          habits={habits}
+          onClose={() => setHabitModal(false)}
+          onAdd={handleAddHabit}
+          onRename={handleRenameHabit}
+          onDelete={handleDeleteHabit}
         />
       )}
     </div>
