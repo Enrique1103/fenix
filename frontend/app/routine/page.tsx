@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useState, useRef, useCallback } from "react"
-import { ChevronLeft, ChevronRight, Plus, Trash2, X } from "lucide-react"
+import { ChevronLeft, ChevronRight, Plus, Check, Pencil, Trash2, X } from "lucide-react"
 import {
   getDayView,
   createTemplate,
@@ -494,8 +494,7 @@ export default function RoutinePage() {
                   onPointerUp={onPointerUp}
                 >
                   <div className="flex items-start justify-between gap-2 h-full">
-                    <div className="flex-1 min-w-0 cursor-pointer"
-                      onClick={() => setModal({ open: true, mode: "edit", isDay: block.isDay, block })}>
+                    <div className="flex-1 min-w-0">
                       <p className={`text-xs font-semibold leading-tight truncate
                         ${done ? "line-through text-zinc-500" : "text-zinc-200"}`}>
                         {block.title}
@@ -519,6 +518,22 @@ export default function RoutinePage() {
                           )}
                         </div>
                       )}
+                    </div>
+                    <div className="flex items-center gap-1.5 flex-shrink-0 mt-0.5">
+                      <button
+                        onPointerDown={e => e.stopPropagation()}
+                        onClick={() => setModal({ open: true, mode: "edit", isDay: block.isDay, block })}
+                        className="w-5 h-5 rounded-full border border-slate-600 flex items-center justify-center
+                          hover:border-zinc-400 transition-all">
+                        <Pencil size={9} className="text-zinc-500"/>
+                      </button>
+                      <button
+                        onPointerDown={e => e.stopPropagation()}
+                        onClick={() => handleComplete(block.id, block.isDay, done, block.habit_id)}
+                        className={`w-5 h-5 rounded-full border flex items-center justify-center transition-all
+                          ${done ? "bg-green-500 border-green-500" : "border-slate-600 hover:border-green-500"}`}>
+                        {done && <Check size={9} className="text-white"/>}
+                      </button>
                     </div>
                   </div>
                 </div>
