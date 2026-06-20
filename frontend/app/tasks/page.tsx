@@ -273,7 +273,7 @@ function TaskNode({ task, allTasks, onToggle, onDelete, onOpenDeps, onAddTask, t
 
 export default function TasksPage() {
   const [tab, setTab]         = useState<TabKey>("daily")
-  const [view, setView]       = useState<"list" | "graph">("list")
+  const [view, setView]       = useState<"list" | "graph">("graph")
   const [allTasks, setAllTasks] = useState<Task[]>([])
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
