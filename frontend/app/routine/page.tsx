@@ -131,10 +131,9 @@ function BlockModal({
   }
 
   return (
-    <div className="fixed inset-0 bg-black/70 z-40 flex items-end" onClick={onClose}>
-      <div className="w-full max-w-lg mx-auto bg-zinc-900 border-t border-slate-700/40 rounded-t-2xl
-        p-5 max-h-[92vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
-        <div className="w-9 h-1 bg-zinc-700 rounded mx-auto mb-4"/>
+    <div className="fixed inset-0 bg-black/70 z-40 flex items-center justify-center px-4" onClick={onClose}>
+      <div className="w-full max-w-lg bg-zinc-900 border border-slate-700/40 rounded-2xl
+        p-5 max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between mb-4">
           <p className="text-sm font-semibold text-zinc-100">
             {mode === "create" ? "Nuevo bloque" : "Editar bloque"}
