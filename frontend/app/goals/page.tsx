@@ -1,14 +1,15 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import { useGoals, useHabits } from "@/lib/swr-hooks"
 import {
   Plus, Pencil, Trash2, X, Check, CalendarDays,
   Flame, Target, Trophy, ImageIcon, LayoutGrid,
   ChevronDown, Share2, GitBranch,
 } from "lucide-react"
 import {
-  getGoals, createGoal, updateGoal, deleteGoal,
-  attachHabit, detachHabit, getHabits, getGoalProgress,
+  createGoal, updateGoal, deleteGoal,
+  attachHabit, detachHabit, getGoalProgress,
   completeGoal, getCompletedGoals,
 } from "@/lib/api"
 import { Goal, Habit, GoalProgress } from "@/lib/types"
@@ -574,22 +575,12 @@ function GoalModal({ initial, habits, onSave, onClose }: {
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function GoalsPage() {
-  const [goals,     setGoals]     = useState<Goal[]>([])
-  const [habits,    setHabits]    = useState<Habit[]>([])
-  const [loading,   setLoading]   = useState(true)
+  const { data: goals = [], isLoading: loading, mutate } = useGoals()
+  const { data: habits = [] } = useHabits()
   const [view,      setView]      = useState<ViewMode>("cards")
   const [tab,       setTab]       = useState<TabMode>("active")
   const [showModal, setShowModal] = useState(false)
   const [editing,   setEditing]   = useState<Goal | undefined>(undefined)
-
-  async function load() {
-    const [g, h] = await Promise.all([getGoals(), getHabits()])
-    setGoals(g)
-    setHabits(h)
-    setLoading(false)
-  }
-
-  useEffect(() => { load() }, [])
 
   async function handleSave(data: Parameters<typeof createGoal>[0], habitIds: string[]) {
     if (editing) {
@@ -603,7 +594,7 @@ export default function GoalsPage() {
       const goal = await createGoal(data)
       await Promise.all(habitIds.map(id => attachHabit(goal.id, id)))
     }
-    await load()
+    await mutate()
   }
 
   async function handleDelete(id: number) {
@@ -658,7 +649,7 @@ export default function GoalsPage() {
 
       <div className="p-4 space-y-3">
         {tab === "achievements" ? (
-          <AchievementsTab onReopened={() => { load(); setTab("active") }}/>
+          <AchievementsTab onReopened={() => { mutate(); setTab("active") }}/>
         ) : loading ? (
           <div className="space-y-3">
             {[1, 2].map(i => <div key={i} className="h-20 bg-zinc-900 rounded-2xl animate-pulse"/>)}

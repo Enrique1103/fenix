@@ -1,9 +1,10 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState } from "react"
 import { Plus, Trash2, Check, CalendarDays, X, ChevronRight, Lock, GitBranch, List, Network, Pencil } from "lucide-react"
-import { getTasks, createTask, updateTask, deleteTask, addTaskDep, removeTaskDep } from "@/lib/api"
+import { createTask, updateTask, deleteTask, addTaskDep, removeTaskDep } from "@/lib/api"
 import { Task } from "@/lib/types"
+import { useTasks } from "@/lib/swr-hooks"
 import dynamic from "next/dynamic"
 import { DateInput } from "@/components/date-input"
 import { TaskDetailModal } from "@/components/task-detail-modal"
@@ -320,19 +321,10 @@ function TaskNode({ task, allTasks, onToggle, onDelete, onOpenDeps, onAddTask, o
 
 export default function TasksPage() {
   const [view, setView]           = useState<"list" | "graph">("graph")
-  const [allTasks, setAllTasks]   = useState<Task[]>([])
-  const [loading, setLoading]     = useState(true)
+  const { data: allTasks = [], isLoading: loading, mutate } = useTasks()
   const [showForm, setShowForm]   = useState(false)
   const [depsFor, setDepsFor]     = useState<Task | null>(null)
   const [detailTask, setDetailTask] = useState<Task | null>(null)
-
-  async function load() {
-    const tasks = await getTasks()
-    setAllTasks(tasks)
-    setLoading(false)
-  }
-
-  useEffect(() => { load() }, [])
 
   const roots     = allTasks.filter(t => t.parent_task_id === null)
   const pending   = sortRoots(roots.filter(t => !t.completed))
@@ -340,7 +332,7 @@ export default function TasksPage() {
 
   async function handleAddTask(title: string, deadline: string, parentId?: number, description?: string) {
     await createTask({ title, deadline: deadline || undefined, parent_task_id: parentId, description })
-    await load()
+    await mutate()
   }
 
   async function handleAddRoot(title: string, deadline: string) {
@@ -350,25 +342,25 @@ export default function TasksPage() {
 
   async function handleToggle(task: Task) {
     await updateTask(task.id, { completed: !task.completed })
-    await load()
+    await mutate()
   }
 
   async function handleDelete(id: number) {
     await deleteTask(id)
-    await load()
+    await mutate()
   }
 
   async function handleAddDep(depId: number) {
     if (!depsFor) return
     await addTaskDep(depsFor.id, depId)
-    await load()
+    await mutate()
     setDepsFor(prev => prev ? { ...prev, dep_ids: [...prev.dep_ids, depId] } : prev)
   }
 
   async function handleRemoveDep(depId: number) {
     if (!depsFor) return
     await removeTaskDep(depsFor.id, depId)
-    await load()
+    await mutate()
     setDepsFor(prev => prev ? { ...prev, dep_ids: prev.dep_ids.filter(id => id !== depId) } : prev)
   }
 
@@ -421,9 +413,9 @@ export default function TasksPage() {
               tasks={allTasks}
               allTasks={allTasks}
               onAddTask={handleAddTask}
-              onConnect={async (taskId, depId) => { await addTaskDep(taskId, depId); await load() }}
-              onDisconnect={async (taskId, depId) => { await removeTaskDep(taskId, depId); await load() }}
-              onDelete={async (taskId) => { await deleteTask(taskId); await load() }}
+              onConnect={async (taskId, depId) => { await addTaskDep(taskId, depId); await mutate() }}
+              onDisconnect={async (taskId, depId) => { await removeTaskDep(taskId, depId); await mutate() }}
+              onDelete={async (taskId) => { await deleteTask(taskId); await mutate() }}
               onTaskClick={setDetailTask}
               onToggleComplete={handleToggle}
             />
@@ -493,7 +485,7 @@ export default function TasksPage() {
         <TaskDetailModal
           task={detailTask}
           onClose={() => setDetailTask(null)}
-          onSaved={() => { load(); setDetailTask(null) }}
+          onSaved={() => { mutate(); setDetailTask(null) }}
         />
       )}
     </div>
