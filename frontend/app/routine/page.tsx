@@ -297,8 +297,10 @@ function BlockModal({
   return (
     <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-40 flex items-center justify-center px-4" onClick={onClose}>
       <div className="w-full max-w-lg bg-zinc-900 border border-slate-700/40 rounded-2xl
-        p-5 max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
-        <div className="flex items-center justify-between mb-4">
+        max-h-[90vh] flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
+
+        {/* Header fijo — no scrollea */}
+        <div className="flex items-center justify-between px-5 pt-5 pb-4 border-b border-slate-700/30 shrink-0">
           <p className="text-sm font-semibold text-zinc-100">
             {mode === "create" ? "Nuevo bloque" : "Editar bloque"}
           </p>
@@ -306,6 +308,9 @@ function BlockModal({
             <X size={16}/>
           </button>
         </div>
+
+        {/* Body scrollable */}
+        <div className="overflow-y-auto px-5 pb-5 pt-4">
 
         {/* Título */}
         <div className="mb-3">
@@ -502,6 +507,8 @@ function BlockModal({
             {saving ? "…" : "Guardar"}
           </button>
         </div>
+
+        </div>{/* fin body scrollable */}
       </div>
     </div>
   )
