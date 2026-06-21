@@ -7,6 +7,7 @@ import { getGoalsGraph, addGoalDep, removeGoalDep } from "@/lib/api"
 
 const STORAGE_KEY    = "fenix_goal_graph_positions"
 const DRAG_THRESHOLD = 5
+const LONG_PRESS_MS  = 180
 
 interface Pos { x: number; y: number }
 
@@ -27,9 +28,19 @@ export function GoalGraph({ goals, onEdit, onComplete, onDelete }: {
   const [selected, setSelected]  = useState<number | null>(null)
   const [connectFrom, setConnectFrom] = useState<number | null>(null)
   const [hoveredDep, setHoveredDep] = useState<string | null>(null)
-  const containerRef = useRef<HTMLDivElement>(null)
-  const dragRef  = useRef<{ id: number; ox: number; oy: number; sx: number; sy: number } | null>(null)
-  const hasMoved = useRef(false)
+  const [draggingId, setDraggingId]     = useState<number | null>(null)
+  const containerRef   = useRef<HTMLDivElement>(null)
+  const dragRef        = useRef<{ id: number; ox: number; oy: number; sx: number; sy: number } | null>(null)
+  const hasMoved       = useRef(false)
+  const isDragActive   = useRef(false)
+  const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  function cancelLongPress() {
+    if (longPressTimer.current !== null) {
+      clearTimeout(longPressTimer.current)
+      longPressTimer.current = null
+    }
+  }
 
   const loadGraph = useCallback(async () => {
     try {
@@ -58,9 +69,8 @@ export function GoalGraph({ goals, onEdit, onComplete, onDelete }: {
     setPositions(pos)
   }
 
-  function onPointerDown(e: React.PointerEvent, id: number) {
+  function onPointerDown(e: React.PointerEvent<HTMLDivElement>, id: number) {
     if (connectFrom !== null) return
-    e.currentTarget.setPointerCapture(e.pointerId)
     hasMoved.current = false
     dragRef.current = {
       id,
@@ -69,6 +79,23 @@ export function GoalGraph({ goals, onEdit, onComplete, onDelete }: {
       sx: e.clientX,
       sy: e.clientY,
     }
+
+    if (e.pointerType === "mouse") {
+      e.currentTarget.setPointerCapture(e.pointerId)
+      isDragActive.current = true
+      setDraggingId(id)
+    } else {
+      const el  = e.currentTarget
+      const pid = e.pointerId
+      longPressTimer.current = setTimeout(() => {
+        longPressTimer.current = null
+        if (dragRef.current?.id === id) {
+          el.setPointerCapture(pid)
+          isDragActive.current = true
+          setDraggingId(id)
+        }
+      }, LONG_PRESS_MS)
+    }
   }
 
   function onPointerMove(e: React.PointerEvent) {
@@ -76,6 +103,16 @@ export function GoalGraph({ goals, onEdit, onComplete, onDelete }: {
     if (!d) return
     const dx = e.clientX - d.sx
     const dy = e.clientY - d.sy
+
+    if (longPressTimer.current !== null) {
+      if (Math.abs(dx) > 5 || Math.abs(dy) > 5) {
+        cancelLongPress()
+        dragRef.current = null
+      }
+      return
+    }
+
+    if (!isDragActive.current) return
     if (!hasMoved.current && (Math.abs(dx) > DRAG_THRESHOLD || Math.abs(dy) > DRAG_THRESHOLD)) {
       hasMoved.current = true
     }
@@ -85,21 +122,23 @@ export function GoalGraph({ goals, onEdit, onComplete, onDelete }: {
   }
 
   function onPointerUp(e: React.PointerEvent) {
+    cancelLongPress()
     const d = dragRef.current
-    if (!d) return
-    e.currentTarget.releasePointerCapture(e.pointerId)
+    if (!d) { isDragActive.current = false; setDraggingId(null); return }
+    try { e.currentTarget.releasePointerCapture(e.pointerId) } catch {}
     if (hasMoved.current) {
       const dx = e.clientX - d.sx
       const dy = e.clientY - d.sy
-      const next = { ...positions, [d.id]: { x: d.ox + dx, y: d.oy + dy } }
-      savePositions(next)
+      savePositions({ ...positions, [d.id]: { x: d.ox + dx, y: d.oy + dy } })
     }
-    dragRef.current  = null
-    hasMoved.current = false
+    dragRef.current      = null
+    hasMoved.current     = false
+    isDragActive.current = false
+    setDraggingId(null)
   }
 
   async function handleNodeClick(id: number) {
-    if (hasMoved.current) return
+    if (hasMoved.current || isDragActive.current) return
     if (connectFrom !== null) {
       if (connectFrom !== id) {
         await addGoalDep(id, connectFrom)
@@ -187,21 +226,28 @@ export function GoalGraph({ goals, onEdit, onComplete, onDelete }: {
           const pos = positions[goal.id]
           if (!pos) return null
           const { bg, border, text } = nodeColor(goal)
-          const isSel = selected === goal.id
+          const isSel      = selected === goal.id
+          const isDragging = draggingId === goal.id
           return (
             <div
               key={goal.id}
-              className="absolute select-none touch-none cursor-pointer rounded-xl px-3 py-2.5 transition-shadow"
+              className="absolute select-none touch-none cursor-pointer rounded-xl px-3 py-2.5"
               style={{
                 left: pos.x, top: pos.y,
                 width: NODE_W, height: NODE_H,
                 background: bg,
                 border: `1.5px solid ${isSel ? "#22c55e" : border}`,
-                boxShadow: isSel ? "0 0 0 2px rgba(34,197,94,0.2)" : "none",
+                boxShadow: isDragging
+                  ? "0 10px 28px rgba(0,0,0,0.4)"
+                  : isSel ? "0 0 0 2px rgba(34,197,94,0.2)" : "none",
+                transform: isDragging ? "scale(1.06)" : "scale(1)",
+                transition: "transform 0.12s ease, box-shadow 0.12s ease",
+                zIndex: isDragging ? 10 : 1,
               }}
               onPointerDown={e => onPointerDown(e, goal.id)}
               onPointerMove={onPointerMove}
               onPointerUp={onPointerUp}
+              onPointerCancel={onPointerUp}
               onClick={() => handleNodeClick(goal.id)}
             >
               <p className="text-xs font-semibold leading-tight truncate" style={{ color: text }}>
