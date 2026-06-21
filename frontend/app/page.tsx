@@ -1,8 +1,8 @@
 "use client"
 
 import { useState, useEffect, useCallback } from "react"
-import { ChevronLeft, ChevronRight, Flame, TrendingUp, TrendingDown, Plus, Pencil, Trash2, Check, X } from "lucide-react"
-import { getHabits, getMonthAll, setRecord, getMonthSummary, getMonthMood, setMood, getStreak, createHabit, updateHabit, deleteHabit } from "@/lib/api"
+import { ChevronLeft, ChevronRight, Flame, TrendingUp, TrendingDown, Plus, Pencil, Trash2, Check, X, GripVertical } from "lucide-react"
+import { getHabits, getMonthAll, setRecord, getMonthSummary, getMonthMood, setMood, getStreak, createHabit, updateHabit, deleteHabit, reorderHabits } from "@/lib/api"
 import { Habit } from "@/lib/types"
 import { MONTHS, DAYS_SHORT, daysInMonth, firstWeekdayOffset, toISODate } from "@/lib/utils"
 import { HabitCell } from "@/components/habit-cell"
@@ -10,6 +10,7 @@ import { MoodEmoji } from "@/components/mood-emoji"
 import { MonthlyEKGChart } from "@/components/monthly-ekg-chart"
 import { SuggestedTaskCard } from "@/components/suggested-task-card"
 import { diffClass } from "@/lib/color"
+import { Toast } from "@/components/toast"
 
 type RecordMatrix = Record<string, Record<string, string>>
 
@@ -313,18 +314,21 @@ function MonthlyView({
 // ── Habit Manager Modal ───────────────────────────────────────────────────────
 
 function HabitManagerModal({
-  habits, onClose, onAdd, onRename, onDelete,
+  habits, onClose, onAdd, onRename, onDelete, onReorder,
 }: {
   habits: Habit[]
   onClose: () => void
   onAdd: (name: string) => Promise<void>
   onRename: (id: string, name: string) => Promise<void>
   onDelete: (id: string) => Promise<void>
+  onReorder: (orderedIds: string[]) => Promise<void>
 }) {
   const [newName, setNewName] = useState("")
   const [apiError, setApiError] = useState("")
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editName, setEditName] = useState("")
+  const [dragIdx, setDragIdx] = useState<number | null>(null)
+  const [overIdx, setOverIdx] = useState<number | null>(null)
 
   async function handleAdd() {
     if (!newName.trim()) return
@@ -341,6 +345,16 @@ function HabitManagerModal({
     if (!editName.trim()) return
     await onRename(id, editName.trim())
     setEditingId(null)
+  }
+
+  function handleDrop(targetIdx: number) {
+    if (dragIdx === null || dragIdx === targetIdx) { setDragIdx(null); setOverIdx(null); return }
+    const next = [...habits]
+    const [moved] = next.splice(dragIdx, 1)
+    next.splice(targetIdx, 0, moved)
+    setDragIdx(null)
+    setOverIdx(null)
+    onReorder(next.map(h => h.id))
   }
 
   return (
@@ -379,7 +393,18 @@ function HabitManagerModal({
             <p className="text-center text-zinc-500 text-sm py-6">Sin hábitos aún</p>
           ) : (
             habits.map((h, idx) => (
-              <div key={h.id} className={`flex items-center gap-2 px-4 py-2.5 ${idx < habits.length - 1 ? "border-b border-slate-700/25" : ""}`}>
+              <div
+                key={h.id}
+                draggable={!editingId}
+                onDragStart={() => setDragIdx(idx)}
+                onDragOver={e => { e.preventDefault(); setOverIdx(idx) }}
+                onDrop={() => handleDrop(idx)}
+                onDragEnd={() => { setDragIdx(null); setOverIdx(null) }}
+                className={`flex items-center gap-2 px-4 py-2.5 transition-colors select-none
+                  ${idx < habits.length - 1 ? "border-b border-slate-700/25" : ""}
+                  ${overIdx === idx && dragIdx !== idx ? "bg-zinc-800/60" : ""}
+                  ${dragIdx === idx ? "opacity-40" : ""}`}>
+                <GripVertical size={13} className="text-zinc-600 shrink-0 cursor-grab"/>
                 {editingId === h.id ? (
                   <>
                     <input
@@ -432,6 +457,11 @@ export default function HabitTrackerPage() {
   const [moodMap, setMoodMap] = useState<Record<string, number>>({})
   const [picker, setPicker] = useState<string | null>(null)
   const [habitModal, setHabitModal] = useState(false)
+  const [toastMsg, setToastMsg]     = useState<string | null>(null)
+
+  function showToast(msg: string) {
+    setToastMsg(msg)
+  }
 
   // Auto-detecta vista según ancho. Se actualiza al redimensionar.
   useEffect(() => {
@@ -499,6 +529,7 @@ export default function HabitTrackerPage() {
       await setRecord(ds, habitId, next ?? null)
     } catch (err) {
       console.error("Error guardando registro:", err)
+      showToast("Error al guardar. Intenta de nuevo.")
       load()
     }
   }
@@ -515,6 +546,11 @@ export default function HabitTrackerPage() {
 
   async function handleDeleteHabit(id: string) {
     await deleteHabit(id)
+    await load()
+  }
+
+  async function handleReorderHabits(orderedIds: string[]) {
+    await reorderHabits(orderedIds)
     await load()
   }
 
@@ -537,6 +573,7 @@ export default function HabitTrackerPage() {
       await setMood(date, level)
     } catch (err) {
       console.error("Error guardando ánimo:", err)
+      showToast("Error al guardar el ánimo.")
       load()
     }
   }
@@ -702,7 +739,12 @@ export default function HabitTrackerPage() {
           onAdd={handleAddHabit}
           onRename={handleRenameHabit}
           onDelete={handleDeleteHabit}
+          onReorder={handleReorderHabits}
         />
+      )}
+
+      {toastMsg && (
+        <Toast message={toastMsg} onDismiss={() => setToastMsg(null)}/>
       )}
     </div>
   )
