@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, useMemo } from "react"
 import { Task } from "@/lib/types"
-import { X, Trash2 } from "lucide-react"
+import { X, Trash2, Check, Pencil } from "lucide-react"
 import { DateInput } from "@/components/date-input"
 
 const NODE_W         = 200
@@ -396,7 +396,7 @@ function GraphCanvas({ tasks, allTasks, storageKey, selectedNodeId, onNodeSelect
 
 // ── Public component ──────────────────────────────────────────────────────────
 
-export function TaskGraph({ tasks, allTasks, tab = "all", onAddTask, onConnect, onDisconnect, onDelete }: {
+export function TaskGraph({ tasks, allTasks, tab = "all", onAddTask, onConnect, onDisconnect, onDelete, onTaskClick, onToggleComplete }: {
   tasks: Task[]
   allTasks: Task[]
   tab?: string
@@ -404,6 +404,8 @@ export function TaskGraph({ tasks, allTasks, tab = "all", onAddTask, onConnect, 
   onConnect: (taskId: number, depId: number) => Promise<void>
   onDisconnect: (taskId: number, depId: number) => Promise<void>
   onDelete: (taskId: number) => Promise<void>
+  onTaskClick?: (task: Task) => void
+  onToggleComplete?: (task: Task) => void
 }) {
   const [selectedNodeId, setSelectedNodeId] = useState<number | null>(null)
   const [addingFor, setAddingFor]           = useState<Task | null>(null)
@@ -454,6 +456,29 @@ export function TaskGraph({ tasks, allTasks, tab = "all", onAddTask, onConnect, 
           ) : (
             <p className="text-xs text-zinc-600 italic">Sin descripción</p>
           )}
+
+          {/* Acciones rápidas */}
+          <div className="flex gap-2 pt-1">
+            {onToggleComplete && (
+              <button
+                onClick={() => { onToggleComplete(selectedTask); setSelectedNodeId(null) }}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border transition-all
+                  ${selectedTask.completed
+                    ? "bg-zinc-800 border-zinc-700 text-zinc-400 hover:border-zinc-600"
+                    : "bg-green-500/10 border-green-500/25 text-green-400 hover:bg-green-500/20"}`}>
+                <Check size={12}/>
+                {selectedTask.completed ? "Reabrir" : "Completar"}
+              </button>
+            )}
+            {onTaskClick && (
+              <button
+                onClick={() => { onTaskClick(selectedTask); setSelectedNodeId(null) }}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border border-slate-700/40 bg-zinc-800 text-zinc-400 hover:text-zinc-200 hover:border-slate-600/60 transition-all">
+                <Pencil size={12}/>
+                Editar
+              </button>
+            )}
+          </div>
 
           {selectedTask.dep_ids.length > 0 && (
             <div className="space-y-1.5 pt-1 border-t border-zinc-800">

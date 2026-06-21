@@ -1,11 +1,12 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { Plus, Trash2, Check, CalendarDays, X, ChevronRight, Lock, GitBranch, List, Network } from "lucide-react"
+import { Plus, Trash2, Check, CalendarDays, X, ChevronRight, Lock, GitBranch, List, Network, Pencil } from "lucide-react"
 import { getTasks, createTask, updateTask, deleteTask, addTaskDep, removeTaskDep } from "@/lib/api"
 import { Task } from "@/lib/types"
 import dynamic from "next/dynamic"
 import { DateInput } from "@/components/date-input"
+import { TaskDetailModal } from "@/components/task-detail-modal"
 
 const TaskGraph = dynamic(() => import("@/components/task-graph").then(m => ({ default: m.TaskGraph })), {
   ssr: false,
@@ -113,17 +114,19 @@ function DepPickerModal({ task, allTasks, onAdd, onRemove, onClose }: {
 
 function AddForm({ parentId, onAdd, onCancel }: {
   parentId?: number
-  onAdd: (title: string, deadline: string, parentId?: number) => Promise<void>
+  onAdd: (title: string, deadline: string, parentId?: number, description?: string) => Promise<void>
   onCancel: () => void
 }) {
-  const [title, setTitle]       = useState("")
-  const [deadline, setDeadline] = useState("")
-  const [saving, setSaving]     = useState(false)
+  const [title,       setTitle]       = useState("")
+  const [deadline,    setDeadline]    = useState("")
+  const [description, setDescription] = useState("")
+  const [saving,      setSaving]      = useState(false)
 
   async function handleAdd() {
     if (!title.trim() || saving) return
     setSaving(true)
-    try { await onAdd(title.trim(), deadline, parentId) } finally { setSaving(false) }
+    try { await onAdd(title.trim(), deadline, parentId, description || undefined) }
+    finally { setSaving(false) }
   }
 
   return (
@@ -132,6 +135,10 @@ function AddForm({ parentId, onAdd, onCancel }: {
         onKeyDown={e => { if (e.key === "Enter") handleAdd(); if (e.key === "Escape") onCancel() }}
         placeholder={parentId !== undefined ? "Título de la subtarea…" : "Título de la tarea…"}
         className="w-full bg-zinc-800 rounded-xl px-3 py-2 text-sm text-zinc-100 placeholder:text-zinc-600 focus:outline-none focus:ring-1 focus:ring-green-500/50"/>
+      <textarea value={description} onChange={e => setDescription(e.target.value)}
+        placeholder="Descripción (opcional)"
+        rows={2}
+        className="w-full bg-zinc-800 rounded-xl px-3 py-2 text-sm text-zinc-400 placeholder:text-zinc-600 focus:outline-none focus:ring-1 focus:ring-green-500/50 resize-none"/>
       <div className="flex items-center gap-2">
         <DateInput value={deadline || null} onChange={v => setDeadline(v ?? "")}
           placeholder="Fecha límite" className="flex-1"/>
@@ -149,13 +156,14 @@ function AddForm({ parentId, onAdd, onCancel }: {
 
 // ── Task node (recursive) ─────────────────────────────────────────────────────
 
-function TaskNode({ task, allTasks, onToggle, onDelete, onOpenDeps, onAddTask }: {
+function TaskNode({ task, allTasks, onToggle, onDelete, onOpenDeps, onAddTask, onOpenDetail }: {
   task: Task
   allTasks: Task[]
   onToggle: (t: Task) => void
   onDelete: (id: number) => void
   onOpenDeps: (t: Task) => void
-  onAddTask: (title: string, deadline: string, parentId?: number) => Promise<void>
+  onAddTask: (title: string, deadline: string, parentId?: number, description?: string) => Promise<void>
+  onOpenDetail: (t: Task) => void
 }) {
   const [expanded, setExpanded] = useState(true)
   const [addingSub, setAddingSub] = useState(false)
@@ -168,8 +176,8 @@ function TaskNode({ task, allTasks, onToggle, onDelete, onOpenDeps, onAddTask }:
     .map(id => allTasks.find(t => t.id === id))
     .filter((d): d is Task => !!d && !d.completed)
 
-  async function handleSubAdd(title: string, deadline: string, parentId?: number) {
-    await onAddTask(title, deadline, parentId)
+  async function handleSubAdd(title: string, deadline: string, parentId?: number, description?: string) {
+    await onAddTask(title, deadline, parentId, description)
     setAddingSub(false)
   }
 
@@ -203,8 +211,9 @@ function TaskNode({ task, allTasks, onToggle, onDelete, onOpenDeps, onAddTask }:
           </button>
 
           <div className="flex-1 min-w-0">
-            <p className={`text-sm leading-snug
-              ${task.completed ? "line-through text-zinc-500" : blocked ? "text-zinc-500" : "text-zinc-100"}`}>
+            <p onClick={() => onOpenDetail(task)}
+              className={`text-sm leading-snug cursor-pointer hover:text-green-300 transition-colors
+                ${task.completed ? "line-through text-zinc-500" : blocked ? "text-zinc-500" : "text-zinc-100"}`}>
               {task.title}
             </p>
             <div className="flex flex-wrap items-center gap-2 mt-0.5">
@@ -235,9 +244,10 @@ function TaskNode({ task, allTasks, onToggle, onDelete, onOpenDeps, onAddTask }:
               title="Agregar subtarea">
               <Plus size={13}/>
             </button>
-            <button onClick={() => onDelete(task.id)}
-              className="p-1.5 rounded-lg text-zinc-600 hover:text-red-400 hover:bg-red-500/10 transition-colors">
-              <Trash2 size={13}/>
+            <button onClick={() => onOpenDetail(task)}
+              className="p-1.5 rounded-lg text-zinc-600 hover:text-zinc-400 hover:bg-zinc-800 transition-colors"
+              title="Editar tarea">
+              <Pencil size={13}/>
             </button>
           </div>
         </div>
@@ -254,6 +264,7 @@ function TaskNode({ task, allTasks, onToggle, onDelete, onOpenDeps, onAddTask }:
               onDelete={onDelete}
               onOpenDeps={onOpenDeps}
               onAddTask={onAddTask}
+              onOpenDetail={onOpenDetail}
             />
           ))}
           {addingSub && (
@@ -272,11 +283,12 @@ function TaskNode({ task, allTasks, onToggle, onDelete, onOpenDeps, onAddTask }:
 // ── Page ─────────────────────────────────────────────────────────────────────
 
 export default function TasksPage() {
-  const [view, setView]         = useState<"list" | "graph">("graph")
-  const [allTasks, setAllTasks] = useState<Task[]>([])
-  const [loading, setLoading]   = useState(true)
-  const [showForm, setShowForm] = useState(false)
-  const [depsFor, setDepsFor]   = useState<Task | null>(null)
+  const [view, setView]           = useState<"list" | "graph">("graph")
+  const [allTasks, setAllTasks]   = useState<Task[]>([])
+  const [loading, setLoading]     = useState(true)
+  const [showForm, setShowForm]   = useState(false)
+  const [depsFor, setDepsFor]     = useState<Task | null>(null)
+  const [detailTask, setDetailTask] = useState<Task | null>(null)
 
   async function load() {
     const tasks = await getTasks()
@@ -290,8 +302,8 @@ export default function TasksPage() {
   const pending   = sortRoots(roots.filter(t => !t.completed))
   const completed = roots.filter(t => t.completed)
 
-  async function handleAddTask(title: string, deadline: string, parentId?: number) {
-    await createTask({ title, deadline: deadline || undefined, parent_task_id: parentId })
+  async function handleAddTask(title: string, deadline: string, parentId?: number, description?: string) {
+    await createTask({ title, deadline: deadline || undefined, parent_task_id: parentId, description })
     await load()
   }
 
@@ -376,6 +388,8 @@ export default function TasksPage() {
               onConnect={async (taskId, depId) => { await addTaskDep(taskId, depId); await load() }}
               onDisconnect={async (taskId, depId) => { await removeTaskDep(taskId, depId); await load() }}
               onDelete={async (taskId) => { await deleteTask(taskId); await load() }}
+              onTaskClick={setDetailTask}
+              onToggleComplete={handleToggle}
             />
             {allTasks.length === 0 && (
               <div className="text-center py-12 text-zinc-600">
@@ -395,6 +409,7 @@ export default function TasksPage() {
                   onDelete={handleDelete}
                   onOpenDeps={setDepsFor}
                   onAddTask={handleAddTask}
+                  onOpenDetail={setDetailTask}
                 />
               ))}
             </div>
@@ -413,6 +428,7 @@ export default function TasksPage() {
                     onDelete={handleDelete}
                     onOpenDeps={setDepsFor}
                     onAddTask={handleAddTask}
+                    onOpenDetail={setDetailTask}
                   />
                 ))}
               </div>
@@ -434,6 +450,14 @@ export default function TasksPage() {
           onAdd={handleAddDep}
           onRemove={handleRemoveDep}
           onClose={() => setDepsFor(null)}
+        />
+      )}
+
+      {detailTask && (
+        <TaskDetailModal
+          task={detailTask}
+          onClose={() => setDetailTask(null)}
+          onSaved={() => { load(); setDetailTask(null) }}
         />
       )}
     </div>
