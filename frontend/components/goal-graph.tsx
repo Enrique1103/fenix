@@ -127,7 +127,7 @@ export function GoalGraph({ goals, onEdit, onComplete, onDelete }: {
 
       <div
         ref={containerRef}
-        className="relative w-full overflow-auto rounded-2xl bg-zinc-900/40 border border-slate-700/30"
+        className="gc relative w-full overflow-auto"
         style={{ height: 520 }}
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}

@@ -418,7 +418,7 @@ export function TaskGraph({ tasks, allTasks, tab = "all", onAddTask, onConnect, 
   return (
     <div className="space-y-2">
       {/* Canvas */}
-      <div className="overflow-x-auto overflow-y-auto rounded-2xl border border-slate-700/30 bg-zinc-950/60">
+      <div className="gc overflow-x-auto overflow-y-auto">
         <GraphCanvas
           tasks={tasks}
           allTasks={allTasks}
