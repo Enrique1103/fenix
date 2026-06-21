@@ -8,11 +8,9 @@ router = APIRouter(prefix="/tasks", tags=["tasks"])
 
 
 @router.get("/")
-def get_tasks(type: Optional[str] = None, user_id: str = Depends(get_user_id)):
+def get_tasks(user_id: str = Depends(get_user_id)):
     db = get_db()
     q = db.table("tasks").select("*").eq("user_id", user_id).order("created_at", desc=True)
-    if type:
-        q = q.eq("type", type)
     tasks = q.execute().data
 
     deps_map: dict[int, list[int]] = {}

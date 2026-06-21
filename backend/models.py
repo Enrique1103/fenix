@@ -20,7 +20,7 @@ class RecordSet(BaseModel):
 
 class TaskCreate(BaseModel):
     title: str
-    type: str
+    type: str = "general"
     deadline: Optional[str] = None
     parent_task_id: Optional[int] = None
     description: Optional[str] = None

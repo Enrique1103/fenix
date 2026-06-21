@@ -11,14 +11,6 @@ const TaskGraph = dynamic(() => import("@/components/task-graph").then(m => ({ d
   loading: () => <div className="h-64 bg-zinc-900 rounded-2xl animate-pulse"/>,
 })
 
-type TabKey = "daily" | "weekly" | "monthly"
-
-const TABS: { key: TabKey; label: string; color: string }[] = [
-  { key: "daily",   label: "Diarias",   color: "text-green-400"  },
-  { key: "weekly",  label: "Semanales", color: "text-blue-400"   },
-  { key: "monthly", label: "Mensuales", color: "text-violet-400" },
-]
-
 function getToday() {
   return new Date().toISOString().slice(0, 10)
 }
@@ -39,6 +31,20 @@ function isBlocked(task: Task, allTasks: Task[]) {
   })
 }
 
+function sortRoots(tasks: Task[]): Task[] {
+  const today = getToday()
+  return [...tasks].sort((a, b) => {
+    const aOverdue = !a.completed && !!a.deadline && a.deadline < today
+    const bOverdue = !b.completed && !!b.deadline && b.deadline < today
+    if (aOverdue && !bOverdue) return -1
+    if (!aOverdue && bOverdue) return 1
+    if (a.deadline && b.deadline) return a.deadline.localeCompare(b.deadline)
+    if (a.deadline && !b.deadline) return -1
+    if (!a.deadline && b.deadline) return 1
+    return b.created_at.localeCompare(a.created_at)
+  })
+}
+
 // ── Dep picker ────────────────────────────────────────────────────────────────
 
 function DepPickerModal({ task, allTasks, onAdd, onRemove, onClose }: {
@@ -50,7 +56,6 @@ function DepPickerModal({ task, allTasks, onAdd, onRemove, onClose }: {
 }) {
   const candidates = allTasks.filter(t =>
     t.id !== task.id &&
-    t.type === task.type &&
     t.parent_task_id === null &&
     !task.dep_ids.includes(t.id)
   )
@@ -105,8 +110,7 @@ function DepPickerModal({ task, allTasks, onAdd, onRemove, onClose }: {
 
 // ── Add form ──────────────────────────────────────────────────────────────────
 
-function AddForm({ tab, parentId, onAdd, onCancel }: {
-  tab: TabKey
+function AddForm({ parentId, onAdd, onCancel }: {
   parentId?: number
   onAdd: (title: string, deadline: string, parentId?: number) => Promise<void>
   onCancel: () => void
@@ -144,14 +148,13 @@ function AddForm({ tab, parentId, onAdd, onCancel }: {
 
 // ── Task node (recursive) ─────────────────────────────────────────────────────
 
-function TaskNode({ task, allTasks, onToggle, onDelete, onOpenDeps, onAddTask, tab }: {
+function TaskNode({ task, allTasks, onToggle, onDelete, onOpenDeps, onAddTask }: {
   task: Task
   allTasks: Task[]
   onToggle: (t: Task) => void
   onDelete: (id: number) => void
   onOpenDeps: (t: Task) => void
   onAddTask: (title: string, deadline: string, parentId?: number) => Promise<void>
-  tab: TabKey
 }) {
   const [expanded, setExpanded] = useState(true)
   const [addingSub, setAddingSub] = useState(false)
@@ -173,7 +176,6 @@ function TaskNode({ task, allTasks, onToggle, onDelete, onOpenDeps, onAddTask, t
 
   return (
     <div className="space-y-1">
-      {/* Node card */}
       <div className={`gc rounded-xl transition-all
         ${blocked ? "opacity-60 !border-zinc-700" : ""}
         ${overdue && !blocked ? "!border-red-500/40" : ""}`}>
@@ -240,7 +242,6 @@ function TaskNode({ task, allTasks, onToggle, onDelete, onOpenDeps, onAddTask, t
         </div>
       </div>
 
-      {/* Children (recursive) + add-sub form */}
       {showChildren && (
         <div className="ml-5 pl-3 border-l border-zinc-800 space-y-1">
           {expanded && subtasks.map(sub => (
@@ -252,12 +253,10 @@ function TaskNode({ task, allTasks, onToggle, onDelete, onOpenDeps, onAddTask, t
               onDelete={onDelete}
               onOpenDeps={onOpenDeps}
               onAddTask={onAddTask}
-              tab={tab}
             />
           ))}
           {addingSub && (
             <AddForm
-              tab={tab}
               parentId={task.id}
               onAdd={handleSubAdd}
               onCancel={() => setAddingSub(false)}
@@ -272,12 +271,11 @@ function TaskNode({ task, allTasks, onToggle, onDelete, onOpenDeps, onAddTask, t
 // ── Page ─────────────────────────────────────────────────────────────────────
 
 export default function TasksPage() {
-  const [tab, setTab]         = useState<TabKey>("daily")
-  const [view, setView]       = useState<"list" | "graph">("graph")
+  const [view, setView]         = useState<"list" | "graph">("graph")
   const [allTasks, setAllTasks] = useState<Task[]>([])
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading]   = useState(true)
   const [showForm, setShowForm] = useState(false)
-  const [depsFor, setDepsFor] = useState<Task | null>(null)
+  const [depsFor, setDepsFor]   = useState<Task | null>(null)
 
   async function load() {
     const tasks = await getTasks()
@@ -287,13 +285,12 @@ export default function TasksPage() {
 
   useEffect(() => { load() }, [])
 
-  const tabTasks  = allTasks.filter(t => t.type === tab)
-  const roots     = tabTasks.filter(t => t.parent_task_id === null)
-  const pending   = roots.filter(t => !t.completed)
+  const roots     = allTasks.filter(t => t.parent_task_id === null)
+  const pending   = sortRoots(roots.filter(t => !t.completed))
   const completed = roots.filter(t => t.completed)
 
   async function handleAddTask(title: string, deadline: string, parentId?: number) {
-    await createTask({ title, type: tab, deadline: deadline || undefined, parent_task_id: parentId })
+    await createTask({ title, deadline: deadline || undefined, parent_task_id: parentId })
     await load()
   }
 
@@ -329,10 +326,15 @@ export default function TasksPage() {
   return (
     <div className="min-h-screen bg-zinc-950 pb-8">
 
-      {/* Header */}
       <div className="px-4 pt-4 pb-4 bg-[var(--sticky-bg)] border-b border-slate-700/40 sticky top-[128px] z-10">
-        <div className="flex items-center justify-between mb-3">
-          <h1 className="text-lg font-bold">Tareas</h1>
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-lg font-bold">Tareas</h1>
+            <p className="text-xs text-zinc-500">
+              {pending.length} pendiente{pending.length !== 1 ? "s" : ""}
+              {completed.length > 0 ? ` · ${completed.length} completada${completed.length !== 1 ? "s" : ""}` : ""}
+            </p>
+          </div>
           <div className="flex items-center gap-1 bg-zinc-800/60 p-1 rounded-xl">
             <button onClick={() => setView("list")}
               className={`p-1.5 rounded-lg transition-colors ${view === "list" ? "bg-zinc-700 text-zinc-100" : "text-zinc-500 hover:text-zinc-300"}`}
@@ -346,22 +348,12 @@ export default function TasksPage() {
             </button>
           </div>
         </div>
-        <div className="flex gap-1 bg-zinc-800/60 p-1 rounded-xl">
-          {TABS.map(({ key, label, color }) => (
-            <button key={key} onClick={() => setTab(key)}
-              className={`flex-1 py-1.5 rounded-lg text-xs font-semibold transition-all
-                ${tab === key ? `bg-zinc-900 ${color}` : "text-zinc-500 hover:text-zinc-300"}`}>
-              {label}
-            </button>
-          ))}
-        </div>
       </div>
 
       <div className="p-4 space-y-4">
 
-        {/* Add form */}
         {showForm ? (
-          <AddForm tab={tab} onAdd={handleAddRoot} onCancel={() => setShowForm(false)}/>
+          <AddForm onAdd={handleAddRoot} onCancel={() => setShowForm(false)}/>
         ) : (
           <button onClick={() => setShowForm(true)}
             className="w-full flex items-center gap-2 py-3 px-4 rounded-2xl border border-dashed border-zinc-700 text-zinc-500 hover:border-green-500/50 hover:text-green-400 transition-colors">
@@ -377,17 +369,16 @@ export default function TasksPage() {
         ) : view === "graph" ? (
           <>
             <TaskGraph
-              tasks={tabTasks}
+              tasks={allTasks}
               allTasks={allTasks}
-              tab={tab}
               onAddTask={handleAddTask}
               onConnect={async (taskId, depId) => { await addTaskDep(taskId, depId); await load() }}
               onDisconnect={async (taskId, depId) => { await removeTaskDep(taskId, depId); await load() }}
               onDelete={async (taskId) => { await deleteTask(taskId); await load() }}
             />
-            {roots.length === 0 && (
+            {allTasks.length === 0 && (
               <div className="text-center py-12 text-zinc-600">
-                <p className="text-sm">Sin tareas {TABS.find(t => t.key === tab)?.label.toLowerCase()}</p>
+                <p className="text-sm">Sin tareas todavía</p>
               </div>
             )}
           </>
@@ -403,7 +394,6 @@ export default function TasksPage() {
                   onDelete={handleDelete}
                   onOpenDeps={setDepsFor}
                   onAddTask={handleAddTask}
-                  tab={tab}
                 />
               ))}
             </div>
@@ -422,15 +412,14 @@ export default function TasksPage() {
                     onDelete={handleDelete}
                     onOpenDeps={setDepsFor}
                     onAddTask={handleAddTask}
-                    tab={tab}
                   />
                 ))}
               </div>
             )}
 
-            {tabTasks.length === 0 && (
+            {allTasks.length === 0 && (
               <div className="text-center py-12 text-zinc-600">
-                <p className="text-sm">Sin tareas {TABS.find(t => t.key === tab)?.label.toLowerCase()}</p>
+                <p className="text-sm">Sin tareas todavía</p>
               </div>
             )}
           </>

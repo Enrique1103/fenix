@@ -14,7 +14,11 @@ import {
 import { Goal, Habit, GoalProgress } from "@/lib/types"
 import { supabase } from "@/lib/supabase"
 import { semanticColor } from "@/lib/color"
-import { GoalGraph } from "@/components/goal-graph"
+import dynamic from "next/dynamic"
+const GoalGraph = dynamic(() => import("@/components/goal-graph").then(m => ({ default: m.GoalGraph })), {
+  ssr: false,
+  loading: () => <div className="h-[520px] bg-zinc-900 rounded-2xl animate-pulse"/>,
+})
 
 type ViewMode = "list" | "cards" | "graph"
 type TabMode  = "active" | "achievements"

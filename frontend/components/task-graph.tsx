@@ -397,10 +397,10 @@ function GraphCanvas({ tasks, allTasks, storageKey, selectedNodeId, onNodeSelect
 
 // ── Public component ──────────────────────────────────────────────────────────
 
-export function TaskGraph({ tasks, allTasks, tab, onAddTask, onConnect, onDisconnect, onDelete }: {
+export function TaskGraph({ tasks, allTasks, tab = "all", onAddTask, onConnect, onDisconnect, onDelete }: {
   tasks: Task[]
   allTasks: Task[]
-  tab: string
+  tab?: string
   onAddTask: (title: string, deadline: string, parentId?: number) => Promise<void>
   onConnect: (taskId: number, depId: number) => Promise<void>
   onDisconnect: (taskId: number, depId: number) => Promise<void>

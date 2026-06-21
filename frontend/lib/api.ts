@@ -142,11 +142,11 @@ export const getCompletedGoals = (): Promise<Goal[]> =>
 
 // ── Tasks ─────────────────────────────────────────────────────────────────────
 
-export const getTasks = (type?: string): Promise<Task[]> =>
-  req(`/tasks${type ? `?type=${type}` : ""}`)
+export const getTasks = (): Promise<Task[]> =>
+  req(`/tasks`)
 
 export const createTask = (data: {
-  title: string; type: string; deadline?: string;
+  title: string; deadline?: string;
   parent_task_id?: number; description?: string
 }): Promise<Task> =>
   req("/tasks", { method: "POST", body: JSON.stringify(data) })

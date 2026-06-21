@@ -58,7 +58,7 @@ export interface Task {
   id: number
   title: string
   description: string | null
-  type: "daily" | "weekly" | "monthly"
+  type?: string
   deadline: string | null
   completed: boolean
   created_at: string
