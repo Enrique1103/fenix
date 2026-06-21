@@ -3,24 +3,37 @@ import { NextResponse } from "next/server"
 import type { NextRequest } from "next/server"
 
 export async function proxy(req: NextRequest) {
-  const res = NextResponse.next()
+  let res = NextResponse.next({ request: req })
 
-  try {
-    const supabase = createServerClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      {
-        cookies: {
-          getAll: () => req.cookies.getAll(),
-          setAll: (cookies) => cookies.forEach(({ name, value, options }) =>
-            res.cookies.set(name, value, options)
-          ),
+  const supabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        getAll: () => req.cookies.getAll(),
+        setAll: (cookies) => {
+          // Propaga cookies al request y a la response para que el token
+          // renovado quede disponible en el resto del ciclo de vida
+          cookies.forEach(({ name, value, options }) => req.cookies.set(name, value, options))
+          res = NextResponse.next({ request: req })
+          cookies.forEach(({ name, value, options }) => res.cookies.set(name, value, options))
         },
-      }
-    )
-    // Refresca la cookie de sesión si está por vencer — sin redirigir
-    await supabase.auth.getSession()
-  } catch {}
+      },
+    }
+  )
+
+  // getUser() valida el JWT en Supabase y renueva el token si expiró.
+  // getSession() solo lee la cookie y falla con tokens expirados → causa el flash.
+  const { data: { user } } = await supabase.auth.getUser()
+
+  const { pathname } = req.nextUrl
+
+  if (!user && pathname !== "/login") {
+    return NextResponse.redirect(new URL("/login", req.url))
+  }
+  if (user && pathname === "/login") {
+    return NextResponse.redirect(new URL("/", req.url))
+  }
 
   return res
 }
