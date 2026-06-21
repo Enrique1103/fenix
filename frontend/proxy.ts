@@ -12,9 +12,7 @@ export async function proxy(req: NextRequest) {
       cookies: {
         getAll: () => req.cookies.getAll(),
         setAll: (cookies) => {
-          // Propaga cookies al request y a la response para que el token
-          // renovado quede disponible en el resto del ciclo de vida
-          cookies.forEach(({ name, value, options }) => req.cookies.set(name, value, options))
+          cookies.forEach(({ name, value }) => req.cookies.set(name, value))
           res = NextResponse.next({ request: req })
           cookies.forEach(({ name, value, options }) => res.cookies.set(name, value, options))
         },
