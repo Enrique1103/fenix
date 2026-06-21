@@ -312,22 +312,30 @@ def monthly_trend(user_id: str = Depends(get_user_id)):
     first_date = date_type.fromisoformat(str(first_res.data[0]["date"]))
     today = date_type.today()
 
+    # Single query for all records — group by month in Python instead of N round-trips
+    first_start, _ = _month_range(first_date.year, first_date.month)
+    all_res = (db.table("records")
+               .select("date,state")
+               .gte("date", first_start)
+               .lte("date", str(today))
+               .eq("user_id", user_id)
+               .execute())
+
+    by_month: dict[tuple[int, int], list[str]] = {}
+    for r in all_res.data:
+        d = date_type.fromisoformat(str(r["date"]))
+        key = (d.year, d.month)
+        if key not in by_month:
+            by_month[key] = []
+        by_month[key].append(r["state"])
+
     result = []
     y, m = first_date.year, first_date.month
 
     while (y, m) <= (today.year, today.month):
-        start, end = _month_range(y, m)
-        cap = str(today) if (y, m) == (today.year, today.month) else end
-
-        res = (db.table("records")
-               .select("state")
-               .gte("date", start)
-               .lte("date", cap)
-               .eq("user_id", user_id)
-               .execute())
-
-        done = sum(1 for r in res.data if r["state"] == "done")
-        rest = sum(1 for r in res.data if r["state"] == "rest")
+        states = by_month.get((y, m), [])
+        done = sum(1 for s in states if s == "done")
+        rest = sum(1 for s in states if s == "rest")
         days_elapsed = today.day if (y, m) == (today.year, today.month) else calendar.monthrange(y, m)[1]
         total = days_elapsed * habit_count - rest
         pct = round(done / total * 100, 1) if total > 0 else 0

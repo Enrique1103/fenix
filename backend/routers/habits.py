@@ -44,6 +44,11 @@ def delete_habit(habit_id: str, user_id: str = Depends(get_user_id)):
 @router.put("/reorder")
 def reorder_habits(ordered_ids: list[str], user_id: str = Depends(get_user_id)):
     db = get_db()
-    for i, hid in enumerate(ordered_ids):
-        db.table("habits").update({"ord": i}).eq("id", hid).eq("user_id", user_id).execute()
+    if not ordered_ids:
+        return {"ok": True}
+    owned = db.table("habits").select("id").eq("user_id", user_id).in_("id", ordered_ids).execute()
+    owned_ids = {r["id"] for r in owned.data}
+    rows = [{"id": hid, "ord": i, "user_id": user_id} for i, hid in enumerate(ordered_ids) if hid in owned_ids]
+    if rows:
+        db.table("habits").upsert(rows).execute()
     return {"ok": True}
