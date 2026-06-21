@@ -1,6 +1,6 @@
 "use client"
 
-import { useRef } from "react"
+import { memo, useCallback, useRef } from "react"
 import { Check, Minus, X } from "lucide-react"
 import { HabitState } from "@/lib/types"
 
@@ -8,12 +8,18 @@ interface HabitCellProps {
   state: HabitState | undefined
   isToday: boolean
   isPast: boolean
-  onCycle: () => void
+  date: string
+  habitId: string
+  onCycle: (date: string, habitId: string) => void
   size?: "sm" | "md"
 }
 
-export function HabitCell({ state, isToday, isPast, onCycle, size = "md" }: HabitCellProps) {
+export const HabitCell = memo(function HabitCell({
+  state, isToday, isPast, date, habitId, onCycle, size = "md",
+}: HabitCellProps) {
   const touchStartPos = useRef<{ x: number; y: number } | null>(null)
+
+  const handleCycle = useCallback(() => onCycle(date, habitId), [date, habitId, onCycle])
 
   const dim = size === "md" ? "w-9 h-9" : "w-8 h-8"
   const iconSize = size === "md" ? 13 : 11
@@ -41,15 +47,15 @@ export function HabitCell({ state, isToday, isPast, onCycle, size = "md" }: Habi
         touchStartPos.current = null
         if (dx < 10 && dy < 10) {
           e.preventDefault()
-          onCycle()
+          handleCycle()
         }
       }}
       onTouchCancel={() => { touchStartPos.current = null }}
-      onClick={() => onCycle()}
+      onClick={handleCycle}
     >
       {state === 'done'   && <Check size={iconSize} strokeWidth={3} className="text-white" />}
       {state === 'rest'   && <Minus size={iconSize} strokeWidth={3} className="text-white" />}
       {state === 'failed' && <X     size={iconSize} strokeWidth={3} className="text-white" />}
     </div>
   )
-}
+})

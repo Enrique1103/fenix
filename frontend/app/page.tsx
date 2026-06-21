@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback, useRef } from "react"
 import { ChevronLeft, ChevronRight, Flame, TrendingUp, TrendingDown, Plus, Pencil, Trash2, Check, X, GripVertical } from "lucide-react"
 import { getHabits, getMonthAll, setRecord, getMonthSummary, getMonthMood, setMood, getStreak, createHabit, updateHabit, deleteHabit, reorderHabits } from "@/lib/api"
 import { Habit } from "@/lib/types"
@@ -164,7 +164,9 @@ function WeeklyView({
                           state={matrix[ds]?.[habit.id] as any}
                           isToday={isToday}
                           isPast={isPast}
-                          onCycle={() => onCycle(ds, habit.id)}
+                          date={ds}
+                          habitId={habit.id}
+                          onCycle={onCycle}
                         />
                       </div>
                     )
@@ -270,7 +272,9 @@ function MonthlyView({
                         state={matrix[ds]?.[habit.id] as any}
                         isToday={isToday}
                         isPast={isPast}
-                        onCycle={() => onCycle(ds, habit.id)}
+                        date={ds}
+                        habitId={habit.id}
+                        onCycle={onCycle}
                         size="sm"
                       />
                     </div>
@@ -449,6 +453,8 @@ export default function HabitTrackerPage() {
   const [month, setMonth] = useState(now.getMonth() + 1)
   const [habits, setHabits] = useState<Habit[]>([])
   const [matrix, setMatrix] = useState<RecordMatrix>({})
+  const matrixRef = useRef(matrix)
+  matrixRef.current = matrix
   const [loading, setLoading] = useState(true)
   const [streakData, setStreakData] = useState({ streak_current: 0, streak_best: 0 })
   const [monthPct, setMonthPct] = useState(0)
@@ -516,8 +522,8 @@ export default function HabitTrackerPage() {
     return undefined
   }
 
-  async function handleCycle(ds: string, habitId: string) {
-    const current = matrix[ds]?.[habitId]
+  const handleCycle = useCallback(async (ds: string, habitId: string) => {
+    const current = matrixRef.current[ds]?.[habitId]
     const next = nextState(current)
     setMatrix(prev => {
       const updated = { ...prev, [ds]: { ...(prev[ds] ?? {}) } }
@@ -532,7 +538,8 @@ export default function HabitTrackerPage() {
       showToast("Error al guardar. Intenta de nuevo.")
       load()
     }
-  }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [setRecord, load, showToast])
 
   async function handleAddHabit(name: string) {
     await createHabit(name)
