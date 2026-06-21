@@ -295,7 +295,7 @@ function BlockModal({
   const selectedHabit = habits.find(h => h.id === habitId)
 
   return (
-    <div className="fixed inset-0 bg-black/50 z-40 flex items-center justify-center px-4" onClick={onClose}>
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-40 flex items-center justify-center px-4" onClick={onClose}>
       <div className="w-full max-w-lg bg-zinc-900 border border-slate-700/40 rounded-2xl
         p-5 max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between mb-4">
@@ -532,7 +532,7 @@ function TmplModal({ onClose, name, setName, onCreate }: {
   }
 
   return (
-    <div className="fixed inset-0 bg-black/50 z-40 flex items-center justify-center px-4" onClick={onClose}>
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-40 flex items-center justify-center px-4" onClick={onClose}>
       <div className="w-full max-w-sm bg-zinc-900 border border-slate-700/40 rounded-2xl p-5"
         onClick={e => e.stopPropagation()}>
         <p className="text-sm font-semibold text-zinc-200 mb-3">Nueva plantilla</p>

@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef, useMemo } from "react"
 import { Task } from "@/lib/types"
 import { X, Trash2 } from "lucide-react"
+import { DateInput } from "@/components/date-input"
 
 const NODE_W         = 200
 const NODE_H         = 64
@@ -129,9 +130,7 @@ function AddSubModal({ parent, onAdd, onClose }: {
             placeholder="Título de la subtarea…"
             className="w-full bg-zinc-800 rounded-xl px-3 py-2 text-sm text-zinc-100 placeholder:text-zinc-600 focus:outline-none focus:ring-1 focus:ring-green-500/50"
           />
-          <input type="date" value={deadline} onChange={e => setDeadline(e.target.value)}
-            className="w-full bg-zinc-800 rounded-xl px-3 py-1.5 text-xs text-zinc-400 focus:outline-none focus:ring-1 focus:ring-green-500/50"
-          />
+          <DateInput value={deadline || null} onChange={v => setDeadline(v ?? "")} placeholder="Fecha límite"/>
           <div className="flex gap-2">
             <button onClick={onClose}
               className="flex-1 py-2 rounded-xl text-xs text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800 transition-colors">

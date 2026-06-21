@@ -5,6 +5,7 @@ import { Plus, Trash2, Check, CalendarDays, X, ChevronRight, Lock, GitBranch, Li
 import { getTasks, createTask, updateTask, deleteTask, addTaskDep, removeTaskDep } from "@/lib/api"
 import { Task } from "@/lib/types"
 import dynamic from "next/dynamic"
+import { DateInput } from "@/components/date-input"
 
 const TaskGraph = dynamic(() => import("@/components/task-graph").then(m => ({ default: m.TaskGraph })), {
   ssr: false,
@@ -132,8 +133,8 @@ function AddForm({ parentId, onAdd, onCancel }: {
         placeholder={parentId !== undefined ? "Título de la subtarea…" : "Título de la tarea…"}
         className="w-full bg-zinc-800 rounded-xl px-3 py-2 text-sm text-zinc-100 placeholder:text-zinc-600 focus:outline-none focus:ring-1 focus:ring-green-500/50"/>
       <div className="flex items-center gap-2">
-        <input type="date" value={deadline} onChange={e => setDeadline(e.target.value)}
-          className="flex-1 bg-zinc-800 rounded-xl px-3 py-1.5 text-xs text-zinc-400 focus:outline-none focus:ring-1 focus:ring-green-500/50"/>
+        <DateInput value={deadline || null} onChange={v => setDeadline(v ?? "")}
+          placeholder="Fecha límite" className="flex-1"/>
         <button onClick={handleAdd} disabled={!title.trim() || saving}
           className="px-3 py-1.5 rounded-xl bg-green-500 hover:bg-green-400 disabled:opacity-40 text-xs font-semibold text-black transition-colors">
           {saving ? "…" : "Agregar"}

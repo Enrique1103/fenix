@@ -15,6 +15,7 @@ import { Goal, Habit, GoalProgress } from "@/lib/types"
 import { supabase } from "@/lib/supabase"
 import { semanticColor } from "@/lib/color"
 import dynamic from "next/dynamic"
+import { DateInput } from "@/components/date-input"
 const GoalGraph = dynamic(() => import("@/components/goal-graph").then(m => ({ default: m.GoalGraph })), {
   ssr: false,
   loading: () => <div className="h-[520px] bg-zinc-900 rounded-2xl animate-pulse"/>,
@@ -540,8 +541,7 @@ function GoalModal({ initial, habits, onSave, onClose }: {
             <label className="text-xs text-zinc-400 flex items-center gap-1">
               <CalendarDays size={11}/> Fecha límite
             </label>
-            <input type="date" value={deadline} onChange={e => setDeadline(e.target.value)}
-              className="w-full bg-zinc-800 rounded-xl px-3 py-2.5 text-sm text-zinc-300 focus:outline-none focus:ring-1 focus:ring-green-500/50"/>
+            <DateInput value={deadline || null} onChange={v => setDeadline(v ?? "")} placeholder="Sin fecha límite"/>
           </div>
 
           {habits.length > 0 && (
