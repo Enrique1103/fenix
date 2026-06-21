@@ -2,8 +2,9 @@
 
 import { useState, useEffect, useCallback, useRef } from "react"
 import { ChevronLeft, ChevronRight, Flame, TrendingUp, TrendingDown, Plus, Pencil, Trash2, Check, X, GripVertical } from "lucide-react"
-import { getHabits, getMonthAll, setRecord, getMonthSummary, getMonthMood, setMood, getStreak, createHabit, updateHabit, deleteHabit, reorderHabits } from "@/lib/api"
+import { setRecord, setMood, createHabit, updateHabit, deleteHabit, reorderHabits } from "@/lib/api"
 import { Habit } from "@/lib/types"
+import { useHomeData, type HomeData } from "@/lib/swr-hooks"
 import { MONTHS, DAYS_SHORT, daysInMonth, firstWeekdayOffset, toISODate } from "@/lib/utils"
 import { HabitCell } from "@/components/habit-cell"
 import { MoodEmoji } from "@/components/mood-emoji"
@@ -451,19 +452,21 @@ export default function HabitTrackerPage() {
 
   const [year, setYear] = useState(now.getFullYear())
   const [month, setMonth] = useState(now.getMonth() + 1)
-  const [habits, setHabits] = useState<Habit[]>([])
-  const [matrix, setMatrix] = useState<RecordMatrix>({})
-  const matrixRef = useRef(matrix)
-  matrixRef.current = matrix
-  const [loading, setLoading] = useState(true)
-  const [streakData, setStreakData] = useState({ streak_current: 0, streak_best: 0 })
-  const [monthPct, setMonthPct] = useState(0)
-  const [prevMonthPct, setPrevMonthPct] = useState(0)
   const [view, setView] = useState<"weekly" | "monthly">("weekly")
-  const [moodMap, setMoodMap] = useState<Record<string, number>>({})
   const [picker, setPicker] = useState<string | null>(null)
   const [habitModal, setHabitModal] = useState(false)
   const [toastMsg, setToastMsg]     = useState<string | null>(null)
+
+  const { data: homeData, isLoading: loading, mutate: mutateHome } = useHomeData(year, month)
+  const homeDataRef = useRef<HomeData | undefined>(homeData)
+  homeDataRef.current = homeData
+
+  const habits     = homeData?.habits     ?? []
+  const matrix     = homeData?.matrix     ?? {}
+  const streakData = homeData?.streakData ?? { streak_current: 0, streak_best: 0 }
+  const monthPct   = homeData?.monthPct   ?? 0
+  const prevMonthPct = homeData?.prevMonthPct ?? 0
+  const moodMap    = homeData?.moodMap    ?? {}
 
   function showToast(msg: string) {
     setToastMsg(msg)
@@ -478,35 +481,6 @@ export default function HabitTrackerPage() {
     window.addEventListener("resize", detect)
     return () => window.removeEventListener("resize", detect)
   }, [])
-
-  // Load data
-  const load = useCallback(async () => {
-    setLoading(true)
-    const prevM = month === 1 ? 12 : month - 1
-    const prevY = month === 1 ? year - 1 : year
-    const [h, records, monthRes, prevMonthRes, streakRes, moodData] = await Promise.all([
-      getHabits(),
-      getMonthAll(year, month),
-      getMonthSummary(year, month),
-      getMonthSummary(prevY, prevM),
-      getStreak(),
-      getMonthMood(year, month).catch(() => ({} as Record<string, number>)),
-    ])
-    setHabits(h)
-    const m: RecordMatrix = {}
-    for (const r of records) {
-      if (!m[r.date]) m[r.date] = {}
-      m[r.date][r.habit_id] = r.state
-    }
-    setMatrix(m)
-    setMoodMap(moodData)
-    setMonthPct(monthRes.pct)
-    setPrevMonthPct(prevMonthRes.pct)
-    setStreakData(streakRes)
-    setLoading(false)
-  }, [year, month])
-
-  useEffect(() => { load() }, [load])
 
   function prevMonth() {
     if (month === 1) { setMonth(12); setYear(y => y - 1) } else setMonth(m => m - 1)
@@ -523,42 +497,42 @@ export default function HabitTrackerPage() {
   }
 
   const handleCycle = useCallback(async (ds: string, habitId: string) => {
-    const current = matrixRef.current[ds]?.[habitId]
+    const current = homeDataRef.current?.matrix[ds]?.[habitId]
     const next = nextState(current)
-    setMatrix(prev => {
-      const updated = { ...prev, [ds]: { ...(prev[ds] ?? {}) } }
-      if (next === undefined) delete updated[ds][habitId]
-      else updated[ds][habitId] = next
-      return updated
-    })
+    mutateHome(prev => {
+      if (!prev) return prev
+      const newMatrix = { ...prev.matrix, [ds]: { ...(prev.matrix[ds] ?? {}) } }
+      if (next === undefined) delete newMatrix[ds][habitId]
+      else newMatrix[ds][habitId] = next
+      return { ...prev, matrix: newMatrix }
+    }, { revalidate: false })
     try {
       await setRecord(ds, habitId, next ?? null)
     } catch (err) {
       console.error("Error guardando registro:", err)
-      showToast("Error al guardar. Intenta de nuevo.")
-      load()
+      setToastMsg("Error al guardar. Intenta de nuevo.")
+      mutateHome()
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [setRecord, load, showToast])
+  }, [mutateHome, setToastMsg])
 
   async function handleAddHabit(name: string) {
     await createHabit(name)
-    await load()
+    await mutateHome()
   }
 
   async function handleRenameHabit(id: string, name: string) {
     await updateHabit(id, { name })
-    await load()
+    await mutateHome()
   }
 
   async function handleDeleteHabit(id: string) {
     await deleteHabit(id)
-    await load()
+    await mutateHome()
   }
 
   async function handleReorderHabits(orderedIds: string[]) {
     await reorderHabits(orderedIds)
-    await load()
+    await mutateHome()
   }
 
   function openMoodPicker(date: string, e: React.MouseEvent) {
@@ -570,18 +544,19 @@ export default function HabitTrackerPage() {
     if (!picker) return
     const date = picker
     setPicker(null)
-    setMoodMap(prev => {
-      const updated = { ...prev }
+    mutateHome(prev => {
+      if (!prev) return prev
+      const updated = { ...prev.moodMap }
       if (level === 0) delete updated[date]
       else updated[date] = level
-      return updated
-    })
+      return { ...prev, moodMap: updated }
+    }, { revalidate: false })
     try {
       await setMood(date, level)
     } catch (err) {
       console.error("Error guardando ánimo:", err)
       showToast("Error al guardar el ánimo.")
-      load()
+      mutateHome()
     }
   }
 
