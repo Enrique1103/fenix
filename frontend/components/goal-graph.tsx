@@ -5,7 +5,8 @@ import { Check, Pencil, Trash2, X, Plus } from "lucide-react"
 import { Goal } from "@/lib/types"
 import { getGoalsGraph, addGoalDep, removeGoalDep } from "@/lib/api"
 
-const STORAGE_KEY = "fenix_goal_graph_positions"
+const STORAGE_KEY    = "fenix_goal_graph_positions"
+const DRAG_THRESHOLD = 5
 
 interface Pos { x: number; y: number }
 
@@ -27,7 +28,8 @@ export function GoalGraph({ goals, onEdit, onComplete, onDelete }: {
   const [connectFrom, setConnectFrom] = useState<number | null>(null)
   const [hoveredDep, setHoveredDep] = useState<string | null>(null)
   const containerRef = useRef<HTMLDivElement>(null)
-  const dragRef = useRef<{ id: number; ox: number; oy: number; sx: number; sy: number } | null>(null)
+  const dragRef  = useRef<{ id: number; ox: number; oy: number; sx: number; sy: number } | null>(null)
+  const hasMoved = useRef(false)
 
   const loadGraph = useCallback(async () => {
     try {
@@ -59,6 +61,7 @@ export function GoalGraph({ goals, onEdit, onComplete, onDelete }: {
   function onPointerDown(e: React.PointerEvent, id: number) {
     if (connectFrom !== null) return
     e.currentTarget.setPointerCapture(e.pointerId)
+    hasMoved.current = false
     dragRef.current = {
       id,
       ox: positions[id]?.x ?? 0,
@@ -73,20 +76,30 @@ export function GoalGraph({ goals, onEdit, onComplete, onDelete }: {
     if (!d) return
     const dx = e.clientX - d.sx
     const dy = e.clientY - d.sy
-    setPositions(prev => ({ ...prev, [d.id]: { x: d.ox + dx, y: d.oy + dy } }))
+    if (!hasMoved.current && (Math.abs(dx) > DRAG_THRESHOLD || Math.abs(dy) > DRAG_THRESHOLD)) {
+      hasMoved.current = true
+    }
+    if (hasMoved.current) {
+      setPositions(prev => ({ ...prev, [d.id]: { x: d.ox + dx, y: d.oy + dy } }))
+    }
   }
 
   function onPointerUp(e: React.PointerEvent) {
     const d = dragRef.current
     if (!d) return
-    const dx = e.clientX - d.sx
-    const dy = e.clientY - d.sy
-    const next = { ...positions, [d.id]: { x: d.ox + dx, y: d.oy + dy } }
-    savePositions(next)
-    dragRef.current = null
+    e.currentTarget.releasePointerCapture(e.pointerId)
+    if (hasMoved.current) {
+      const dx = e.clientX - d.sx
+      const dy = e.clientY - d.sy
+      const next = { ...positions, [d.id]: { x: d.ox + dx, y: d.oy + dy } }
+      savePositions(next)
+    }
+    dragRef.current  = null
+    hasMoved.current = false
   }
 
   async function handleNodeClick(id: number) {
+    if (hasMoved.current) return
     if (connectFrom !== null) {
       if (connectFrom !== id) {
         await addGoalDep(id, connectFrom)
@@ -128,9 +141,7 @@ export function GoalGraph({ goals, onEdit, onComplete, onDelete }: {
       <div
         ref={containerRef}
         className="gc relative w-full overflow-auto"
-        style={{ height: 520 }}
-        onPointerMove={onPointerMove}
-        onPointerUp={onPointerUp}
+        style={{ height: 520, touchAction: "pan-x pan-y" }}
       >
         {/* SVG arrows */}
         <svg className="absolute inset-0" style={{ width: "100%", height: "100%", pointerEvents: "none" }}>
@@ -189,6 +200,8 @@ export function GoalGraph({ goals, onEdit, onComplete, onDelete }: {
                 boxShadow: isSel ? "0 0 0 2px rgba(34,197,94,0.2)" : "none",
               }}
               onPointerDown={e => onPointerDown(e, goal.id)}
+              onPointerMove={onPointerMove}
+              onPointerUp={onPointerUp}
               onClick={() => handleNodeClick(goal.id)}
             >
               <p className="text-xs font-semibold leading-tight truncate" style={{ color: text }}>

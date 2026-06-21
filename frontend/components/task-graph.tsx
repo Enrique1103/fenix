@@ -184,7 +184,7 @@ function GraphNode({ task, p, allTasks, isSelected, onPointerDown, onAddClick, t
       <rect x={p.x} y={p.y} width={NODE_W} height={NODE_H} rx="10"
         fill={bg} stroke={border} strokeWidth={isSelected ? "2" : "1.5"}
         onPointerDown={onPointerDown}
-        style={{ cursor: "grab" }}
+        style={{ cursor: "grab", touchAction: "none" }}
       />
 
       {/* Status dot */}
@@ -418,7 +418,7 @@ export function TaskGraph({ tasks, allTasks, tab = "all", onAddTask, onConnect, 
   return (
     <div className="space-y-2">
       {/* Canvas */}
-      <div className="gc overflow-x-auto overflow-y-auto">
+      <div className="gc overflow-x-auto overflow-y-auto" style={{ touchAction: "pan-x pan-y" }}>
         <GraphCanvas
           tasks={tasks}
           allTasks={allTasks}
