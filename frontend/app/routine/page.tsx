@@ -148,7 +148,7 @@ function ClockPicker({ value, onChange, onDone }: {
       {/* Clock face */}
       <svg width={SIZE} height={SIZE} className="cursor-pointer touch-none"
         onPointerDown={onPD} onPointerMove={onPM} onPointerUp={onPU}>
-        <circle cx={C} cy={C} r={C - 4} fill="rgba(18,18,22,0.97)" />
+        <circle cx={C} cy={C} r={C - 4} className="clock-face" />
 
         {/* Hand */}
         <line x1={handBase.x} y1={handBase.y} x2={handEnd.x} y2={handEnd.y}

@@ -132,16 +132,59 @@ body {
 [data-theme="light"] td.sticky,
 [data-theme="light"] th.sticky { background-color: #f0f4f8 !important; }
 
-/* ── Inputs ── */
+/* ── Inputs / selects / textareas ── */
 [data-theme="light"] input[type="date"],
 [data-theme="light"] input[type="time"] {
   background-color: #e2e8f0 !important;
   color: #0f172a !important;
+  color-scheme: light;
 }
+
+[data-theme="light"] select {
+  background-color: #dde3ec !important;
+  color: #0f172a !important;
+  border-color: #cbd5e1 !important;
+  color-scheme: light;
+}
+[data-theme="light"] select option {
+  background-color: #f0f4f8;
+  color: #0f172a;
+}
+
+[data-theme="light"] textarea {
+  background-color: #dde3ec !important;
+  color: #0f172a !important;
+}
+
+[data-theme="light"] input[type="color"] {
+  border: 2px solid #cbd5e1 !important;
+  border-radius: 6px !important;
+  padding: 2px !important;
+}
+
+/* ── Placeholder ── */
+[data-theme="light"] ::placeholder {
+  color: #94a3b8 !important;
+  opacity: 1;
+}
+
+/* ── Hover backgrounds ── */
+[data-theme="light"] .hover\:bg-zinc-800:hover { background-color: #c8d2df !important; }
+[data-theme="light"] .hover\:bg-zinc-700:hover  { background-color: #b8c5d4 !important; }
+
+/* ── Missing border colors ── */
+[data-theme="light"] .border-zinc-600              { border-color: #94a3b8 !important; }
+[data-theme="light"] .border-zinc-500              { border-color: #7c8da0 !important; }
+[data-theme="light"] .hover\:border-zinc-600:hover { border-color: #94a3b8 !important; }
+[data-theme="light"] .hover\:border-zinc-500:hover { border-color: #7c8da0 !important; }
 
 /* ── Quote colors (amber-200/80 and amber-500/55 are invisible on light bg) ── */
 [data-theme="light"] .text-amber-200\/80 { color: rgba(120, 80, 0, 0.85) !important; }
 [data-theme="light"] .text-amber-500\/55 { color: rgba(146, 90, 0, 0.75) !important; }
+
+/* ── Clock face ── */
+.clock-face { fill: rgba(18, 18, 22, 0.97); }
+[data-theme="light"] .clock-face { fill: rgba(30, 41, 59, 0.92); }
 
 /* ── Scrollbar ── */
 [data-theme="light"] ::-webkit-scrollbar-thumb       { background: rgba(148,163,184,0.55); }
