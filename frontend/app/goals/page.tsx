@@ -599,12 +599,12 @@ export default function GoalsPage() {
 
   async function handleDelete(id: number) {
     await deleteGoal(id)
-    setGoals(prev => prev.filter(g => g.id !== id))
+    await mutate()
   }
 
   async function handleComplete(id: number) {
     await completeGoal(id)
-    setGoals(prev => prev.filter(g => g.id !== id))
+    await mutate()
   }
 
   // Sort: short first, then long
