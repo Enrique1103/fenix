@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect, useRef, useCallback } from "react"
-import { Check, Pencil, Trash2, X, Plus, GripVertical } from "lucide-react"
+import { Check, Pencil, Trash2, X, Plus, Move } from "lucide-react"
 import { Goal } from "@/lib/types"
 import { getGoalsGraph, addGoalDep, removeGoalDep } from "@/lib/api"
 
@@ -31,6 +31,7 @@ export function GoalGraph({ goals, onEdit, onComplete, onDelete }: {
   const containerRef = useRef<HTMLDivElement>(null)
   const dragRef      = useRef<{ id: number; ox: number; oy: number; sx: number; sy: number } | null>(null)
   const hasMoved     = useRef(false)
+  const didDrag      = useRef(false)
 
   const loadGraph = useCallback(async () => {
     try {
@@ -59,42 +60,54 @@ export function GoalGraph({ goals, onEdit, onComplete, onDelete }: {
     setPositions(pos)
   }
 
-  function onHandlePointerDown(e: React.PointerEvent<HTMLDivElement>, id: number) {
-    e.stopPropagation()
-    if (connectFrom !== null) return
-    e.currentTarget.setPointerCapture(e.pointerId)
+  function beginDrag(id: number, sx: number, sy: number) {
     hasMoved.current = false
-    dragRef.current = {
-      id,
-      ox: positions[id]?.x ?? 0,
-      oy: positions[id]?.y ?? 0,
-      sx: e.clientX,
-      sy: e.clientY,
-    }
+    dragRef.current  = { id, ox: positions[id]?.x ?? 0, oy: positions[id]?.y ?? 0, sx, sy }
     setDraggingId(id)
   }
 
-  function onHandlePointerMove(e: React.PointerEvent) {
+  // Mouse drag from anywhere on the node body
+  function onNodePointerDown(e: React.PointerEvent<HTMLDivElement>, id: number) {
+    if (e.pointerType !== "mouse" || connectFrom !== null) return
+    beginDrag(id, e.clientX, e.clientY)
+    // Capture will happen in onContainerPointerMove once threshold crossed
+  }
+
+  // Explicit move button — works for all pointer types (touch + mouse)
+  function onMoveButtonPointerDown(e: React.PointerEvent<HTMLButtonElement>, id: number) {
+    e.stopPropagation()
+    e.preventDefault()
+    if (connectFrom !== null) return
+    containerRef.current?.setPointerCapture(e.pointerId)
+    beginDrag(id, e.clientX, e.clientY)
+  }
+
+  function onContainerPointerMove(e: React.PointerEvent<HTMLDivElement>) {
     const d = dragRef.current
     if (!d) return
     const dx = e.clientX - d.sx
     const dy = e.clientY - d.sy
     if (!hasMoved.current && (Math.abs(dx) > DRAG_THRESHOLD || Math.abs(dy) > DRAG_THRESHOLD)) {
       hasMoved.current = true
+      // Lazy capture for mouse drags from node body
+      try { containerRef.current?.setPointerCapture(e.pointerId) } catch {}
     }
     if (hasMoved.current) {
       setPositions(prev => ({ ...prev, [d.id]: { x: d.ox + dx, y: d.oy + dy } }))
     }
   }
 
-  function onHandlePointerUp(e: React.PointerEvent) {
+  function onContainerPointerUp(e: React.PointerEvent<HTMLDivElement>) {
     const d = dragRef.current
-    if (!d) { setDraggingId(null); return }
-    try { e.currentTarget.releasePointerCapture(e.pointerId) } catch {}
-    if (hasMoved.current) {
+    if (!d) return
+    const moved = hasMoved.current
+    try { containerRef.current?.releasePointerCapture(e.pointerId) } catch {}
+    if (moved) {
       const dx = e.clientX - d.sx
       const dy = e.clientY - d.sy
       savePositions({ ...positions, [d.id]: { x: d.ox + dx, y: d.oy + dy } })
+      didDrag.current = true
+      setTimeout(() => { didDrag.current = false }, 50)
     }
     dragRef.current  = null
     hasMoved.current = false
@@ -102,7 +115,7 @@ export function GoalGraph({ goals, onEdit, onComplete, onDelete }: {
   }
 
   async function handleNodeClick(id: number) {
-    if (hasMoved.current) return
+    if (didDrag.current) return
     if (connectFrom !== null) {
       if (connectFrom !== id) {
         await addGoalDep(id, connectFrom)
@@ -145,6 +158,9 @@ export function GoalGraph({ goals, onEdit, onComplete, onDelete }: {
         ref={containerRef}
         className="gc relative w-full overflow-auto"
         style={{ height: 520, touchAction: "pan-x pan-y" }}
+        onPointerMove={onContainerPointerMove}
+        onPointerUp={onContainerPointerUp}
+        onPointerCancel={onContainerPointerUp}
       >
         {/* SVG arrows */}
         <svg className="absolute inset-0" style={{ width: "100%", height: "100%", pointerEvents: "none" }}>
@@ -208,32 +224,31 @@ export function GoalGraph({ goals, onEdit, onComplete, onDelete }: {
                 transition: "transform 0.12s ease, box-shadow 0.12s ease",
                 zIndex: isDragging ? 10 : 1,
               }}
+              onPointerDown={e => onNodePointerDown(e, goal.id)}
               onClick={() => handleNodeClick(goal.id)}
             >
-              <div className="flex h-full">
-                {/* Drag handle */}
-                <div
-                  className="shrink-0 w-6 flex items-center justify-center cursor-grab active:cursor-grabbing"
-                  style={{ touchAction: "none" }}
-                  onPointerDown={e => onHandlePointerDown(e, goal.id)}
-                  onPointerMove={onHandlePointerMove}
-                  onPointerUp={onHandlePointerUp}
-                  onPointerCancel={onHandlePointerUp}
-                  onClick={e => e.stopPropagation()}
-                >
-                  <GripVertical size={10} className="text-zinc-500/50"/>
-                </div>
-
-                {/* Content */}
-                <div className="flex-1 min-w-0 py-2.5 pr-6">
-                  <p className="text-xs font-semibold leading-tight truncate" style={{ color: text }}>
-                    {goal.title}
-                  </p>
-                  <p className="text-[9px] text-zinc-600 mt-0.5 truncate">
-                    {goal.goal_type === "action" ? "Acción" : "Mentalización"} · {goal.horizon === "short" ? "Corto" : "Largo"}
-                  </p>
-                </div>
+              {/* Content */}
+              <div className="px-3 py-2.5 pr-14">
+                <p className="text-xs font-semibold leading-tight truncate" style={{ color: text }}>
+                  {goal.title}
+                </p>
+                <p className="text-[9px] text-zinc-600 mt-0.5 truncate">
+                  {goal.goal_type === "action" ? "Acción" : "Mentalización"} · {goal.horizon === "short" ? "Corto" : "Largo"}
+                </p>
               </div>
+
+              {/* Move button */}
+              <button
+                className="absolute top-0 bottom-0 right-[26px] w-6 flex items-center justify-center text-zinc-600 hover:text-zinc-300 transition-colors cursor-grab active:cursor-grabbing"
+                style={{ touchAction: "none" }}
+                onPointerDown={e => onMoveButtonPointerDown(e, goal.id)}
+                onClick={e => e.stopPropagation()}
+              >
+                <Move size={10}/>
+              </button>
+
+              {/* Separator */}
+              <div className="absolute top-2 bottom-2 right-[23px] w-px bg-zinc-700/50"/>
 
               {/* Connect button */}
               <button

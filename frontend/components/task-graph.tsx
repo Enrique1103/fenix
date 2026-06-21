@@ -149,13 +149,14 @@ function AddSubModal({ parent, onAdd, onClose }: {
 
 // ── Node ─────────────────────────────────────────────────────────────────────
 
-function GraphNode({ task, p, allTasks, isSelected, isActiveDrag, onHandlePointerDown, onNodeClick, onAddClick, today }: {
+function GraphNode({ task, p, allTasks, isSelected, isActiveDrag, onMainPointerDown, onHandlePointerDown, onNodeClick, onAddClick, today }: {
   task: Task
   p: { x: number; y: number }
   allTasks: Task[]
   isSelected: boolean
   isActiveDrag: boolean
-  onHandlePointerDown: (e: React.PointerEvent<SVGRectElement>) => void
+  onMainPointerDown: (e: React.PointerEvent<SVGRectElement>) => void
+  onHandlePointerDown: (e: React.PointerEvent<SVGGElement>) => void
   onNodeClick: () => void
   onAddClick: () => void
   today: string
@@ -183,13 +184,14 @@ function GraphNode({ task, p, allTasks, isSelected, isActiveDrag, onHandlePointe
 
   return (
     <g>
-      {/* Main rect — click to select */}
+      {/* Main rect — click to select (mouse also drags from here) */}
       <rect x={p.x} y={p.y} width={NODE_W} height={NODE_H} rx="10"
         fill={isActiveDrag ? "rgba(74,222,128,0.12)" : bg}
         stroke={isActiveDrag ? "#4ade80" : border}
         strokeWidth={isSelected || isActiveDrag ? "2" : "1.5"}
+        onPointerDown={onMainPointerDown}
         onClick={onNodeClick}
-        style={{ cursor: "pointer",
+        style={{ cursor: isActiveDrag ? "grabbing" : "pointer",
           filter: isActiveDrag ? "drop-shadow(0 6px 16px rgba(0,0,0,0.5))" : "none" }}
       />
 
@@ -216,27 +218,36 @@ function GraphNode({ task, p, allTasks, isSelected, isActiveDrag, onHandlePointe
         </text>
       )}
 
-      {/* "+" subtask button */}
-      <g onClick={e => { e.stopPropagation(); onAddClick() }} onPointerDown={e => e.stopPropagation()} style={{ cursor: "pointer" }}>
-        <circle cx={p.x + NODE_W - 12} cy={p.y + 12} r="10" fill="#18181b" stroke="#3f3f46" strokeWidth="1.5"/>
-        <text x={p.x + NODE_W - 12} y={p.y + 17} textAnchor="middle" fontSize="14" fill="#52525b" fontWeight="300">+</text>
-      </g>
-
-      {/* Drag handle — left 16px, transparent overlay */}
-      <rect x={p.x} y={p.y} width={16} height={NODE_H} rx="10 0 0 10"
-        fill="transparent"
+      {/* Move button — next to "+" button, for drag (all pointer types) */}
+      <g
         onPointerDown={onHandlePointerDown}
         style={{ cursor: isActiveDrag ? "grabbing" : "grab", touchAction: "none" }}
-      />
-      {/* Grip visual */}
-      {([0.33, 0.5, 0.67] as number[]).map((ratio, i) => (
-        <line key={i}
-          x1={p.x + 5} y1={p.y + NODE_H * ratio}
-          x2={p.x + 11} y2={p.y + NODE_H * ratio}
-          stroke="#52525b" strokeWidth="1.5" strokeLinecap="round"
-          style={noEvt}
-        />
-      ))}
+      >
+        <circle cx={p.x + NODE_W - 32} cy={p.y + 12} r="10" fill="#18181b" stroke="#3f3f46" strokeWidth="1.5"/>
+        {/* 4-arrow move icon */}
+        {(() => {
+          const cx = p.x + NODE_W - 32, cy = p.y + 12, r = 5
+          const s = { ...noEvt, strokeLinecap: "round" as const, strokeLinejoin: "round" as const }
+          return <>
+            <line x1={cx} y1={cy-r} x2={cx} y2={cy+r} stroke="#71717a" strokeWidth="1.5" style={noEvt}/>
+            <line x1={cx-r} y1={cy} x2={cx+r} y2={cy} stroke="#71717a" strokeWidth="1.5" style={noEvt}/>
+            <polyline points={`${cx-2},${cy-r+2} ${cx},${cy-r} ${cx+2},${cy-r+2}`} fill="none" stroke="#71717a" strokeWidth="1.5" style={s}/>
+            <polyline points={`${cx-2},${cy+r-2} ${cx},${cy+r} ${cx+2},${cy+r-2}`} fill="none" stroke="#71717a" strokeWidth="1.5" style={s}/>
+            <polyline points={`${cx-r+2},${cy-2} ${cx-r},${cy} ${cx-r+2},${cy+2}`} fill="none" stroke="#71717a" strokeWidth="1.5" style={s}/>
+            <polyline points={`${cx+r-2},${cy-2} ${cx+r},${cy} ${cx+r-2},${cy+2}`} fill="none" stroke="#71717a" strokeWidth="1.5" style={s}/>
+          </>
+        })()}
+      </g>
+
+      {/* Separator between move and + */}
+      <line x1={p.x + NODE_W - 20} y1={p.y + 4} x2={p.x + NODE_W - 20} y2={p.y + 20}
+        stroke="#3f3f46" strokeWidth="1" style={noEvt}/>
+
+      {/* "+" subtask button */}
+      <g onClick={e => { e.stopPropagation(); onAddClick() }} onPointerDown={e => e.stopPropagation()} style={{ cursor: "pointer" }}>
+        <circle cx={p.x + NODE_W - 10} cy={p.y + 12} r="9" fill="#18181b" stroke="#3f3f46" strokeWidth="1.5"/>
+        <text x={p.x + NODE_W - 10} y={p.y + 17} textAnchor="middle" fontSize="14" fill="#52525b" fontWeight="300">+</text>
+      </g>
     </g>
   )
 }
@@ -286,10 +297,22 @@ function GraphCanvas({ tasks, allTasks, storageKey, selectedNodeId, onNodeSelect
   const svgW  = Math.max(460, Math.max(...xs) + NODE_W + PAD * 2)
   const svgH  = Math.max(160, Math.max(...ys) + NODE_H + PAD * 2)
 
-  function onHandlePointerDown(e: React.PointerEvent<SVGRectElement>, taskId: number) {
+  // Mouse drag from anywhere on the node body
+  function onMainRectPointerDown(e: React.PointerEvent<SVGRectElement>, taskId: number) {
+    if (e.pointerType !== "mouse") return
     const p = positions.get(taskId)
     if (!p) return
+    hasMoved.current = false
+    dragRef.current  = { id: taskId, sx: e.clientX, sy: e.clientY, ox: p.x, oy: p.y }
+    // Capture happens lazily in onSvgPointerMove once threshold crossed
+  }
+
+  // Move button — works for all pointer types (touch + mouse)
+  function onHandlePointerDown(e: React.PointerEvent<SVGGElement>, taskId: number) {
     e.stopPropagation()
+    e.preventDefault()
+    const p = positions.get(taskId)
+    if (!p) return
     svgRef.current?.setPointerCapture(e.pointerId)
     hasMoved.current = false
     dragRef.current  = { id: taskId, sx: e.clientX, sy: e.clientY, ox: p.x, oy: p.y }
@@ -304,6 +327,10 @@ function GraphCanvas({ tasks, allTasks, storageKey, selectedNodeId, onNodeSelect
     const dy = e.clientY - d.sy
     if (!hasMoved.current && (Math.abs(dx) > DRAG_THRESHOLD || Math.abs(dy) > DRAG_THRESHOLD)) {
       hasMoved.current = true
+      // Lazy capture for mouse drags from main rect
+      try { svgRef.current?.setPointerCapture(e.pointerId) } catch {}
+      setIsDragging(true)
+      setActiveDragId(d.id)
     }
     if (hasMoved.current) {
       setPositions(prev => new Map(prev).set(d.id, {
@@ -315,6 +342,7 @@ function GraphCanvas({ tasks, allTasks, storageKey, selectedNodeId, onNodeSelect
 
   function onSvgPointerUp(e: React.PointerEvent<SVGSVGElement>) {
     const d = dragRef.current
+    if (!d) return
     dragRef.current = null
     setIsDragging(false)
     setActiveDragId(null)
@@ -406,6 +434,7 @@ function GraphCanvas({ tasks, allTasks, storageKey, selectedNodeId, onNodeSelect
             isSelected={selectedNodeId === task.id}
             isActiveDrag={activeDragId === task.id}
             today={today}
+            onMainPointerDown={e => onMainRectPointerDown(e, task.id)}
             onHandlePointerDown={e => onHandlePointerDown(e, task.id)}
             onNodeClick={() => onNodeSelect(task)}
             onAddClick={() => onAddSubtask(task)}
