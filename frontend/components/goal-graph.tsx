@@ -25,6 +25,7 @@ export function GoalGraph({ goals, onEdit, onComplete, onDelete }: {
   const [positions, setPositions] = useState<Record<number, Pos>>({})
   const [selected, setSelected]  = useState<number | null>(null)
   const [connectFrom, setConnectFrom] = useState<number | null>(null)
+  const [hoveredDep, setHoveredDep] = useState<string | null>(null)
   const containerRef = useRef<HTMLDivElement>(null)
   const dragRef = useRef<{ id: number; ox: number; oy: number; sx: number; sy: number } | null>(null)
 
@@ -132,10 +133,13 @@ export function GoalGraph({ goals, onEdit, onComplete, onDelete }: {
         onPointerUp={onPointerUp}
       >
         {/* SVG arrows */}
-        <svg className="absolute inset-0 pointer-events-none" style={{ width: "100%", height: "100%" }}>
+        <svg className="absolute inset-0" style={{ width: "100%", height: "100%", pointerEvents: "none" }}>
           <defs>
             <marker id="arrow" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
               <path d="M0,0 L0,6 L8,3 z" fill="#475569"/>
+            </marker>
+            <marker id="arrow-red" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+              <path d="M0,0 L0,6 L8,3 z" fill="#ef4444"/>
             </marker>
           </defs>
           {deps.map(dep => {
@@ -146,11 +150,23 @@ export function GoalGraph({ goals, onEdit, onComplete, onDelete }: {
             const y1 = from.y + NODE_H
             const x2 = to.x + NODE_W / 2
             const y2 = to.y
+            const key = `${dep.goal_id}-${dep.depends_on_goal_id}`
+            const hovered = hoveredDep === key
             return (
-              <line key={`${dep.goal_id}-${dep.depends_on_goal_id}`}
-                x1={x1} y1={y1} x2={x2} y2={y2}
-                stroke="#475569" strokeWidth={1.5} markerEnd="url(#arrow)"
-                strokeDasharray="4 3"/>
+              <g key={key} style={{ pointerEvents: "all", cursor: "pointer" }}
+                onClick={() => handleDisconnect(dep.goal_id, dep.depends_on_goal_id)}
+                onMouseEnter={() => setHoveredDep(key)}
+                onMouseLeave={() => setHoveredDep(null)}>
+                {/* Hit area — línea ancha invisible para facilitar el click */}
+                <line x1={x1} y1={y1} x2={x2} y2={y2} stroke="transparent" strokeWidth={16}/>
+                {/* Línea visible */}
+                <line x1={x1} y1={y1} x2={x2} y2={y2}
+                  stroke={hovered ? "#ef4444" : "#475569"}
+                  strokeWidth={hovered ? 2 : 1.5}
+                  markerEnd={hovered ? "url(#arrow-red)" : "url(#arrow)"}
+                  strokeDasharray="4 3"
+                  style={{ pointerEvents: "none" }}/>
+              </g>
             )
           })}
         </svg>
