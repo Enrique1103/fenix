@@ -149,14 +149,13 @@ function AddSubModal({ parent, onAdd, onClose }: {
 
 // ── Node ─────────────────────────────────────────────────────────────────────
 
-function GraphNode({ task, p, allTasks, isSelected, isActiveDrag, onMainPointerDown, onHandlePointerDown, onNodeClick, onAddClick, today }: {
+function GraphNode({ task, p, allTasks, isSelected, isActiveDrag, onMainPointerDown, onNodeClick, onAddClick, today }: {
   task: Task
   p: { x: number; y: number }
   allTasks: Task[]
   isSelected: boolean
   isActiveDrag: boolean
   onMainPointerDown: (e: React.PointerEvent<SVGRectElement>) => void
-  onHandlePointerDown: (e: React.PointerEvent<SVGGElement>) => void
   onNodeClick: () => void
   onAddClick: () => void
   today: string
@@ -218,11 +217,8 @@ function GraphNode({ task, p, allTasks, isSelected, isActiveDrag, onMainPointerD
         </text>
       )}
 
-      {/* Move button — next to "+" button, for drag (all pointer types) */}
-      <g
-        onPointerDown={onHandlePointerDown}
-        style={{ cursor: isActiveDrag ? "grabbing" : "grab", touchAction: "none" }}
-      >
+      {/* Move button — visual only; events handled by HTML overlay in GraphCanvas */}
+      <g style={{ pointerEvents: "none" }}>
         <circle cx={p.x + NODE_W - 32} cy={p.y + 12} r="10" fill="#18181b" stroke="#3f3f46" strokeWidth="1.5"/>
         {/* 4-arrow move icon */}
         {(() => {
@@ -307,8 +303,8 @@ function GraphCanvas({ tasks, allTasks, storageKey, selectedNodeId, onNodeSelect
     // Capture happens lazily in onSvgPointerMove once threshold crossed
   }
 
-  // Move button — works for all pointer types (touch + mouse)
-  function onHandlePointerDown(e: React.PointerEvent<SVGGElement>, taskId: number) {
+  // Move button drag — called from HTML overlay div (touch-action: none respected)
+  function startMoveDrag(e: React.PointerEvent<HTMLDivElement>, taskId: number) {
     e.stopPropagation()
     e.preventDefault()
     const p = positions.get(taskId)
@@ -354,10 +350,11 @@ function GraphCanvas({ tasks, allTasks, storageKey, selectedNodeId, onNodeSelect
   }
 
   return (
+  <div style={{ position: "relative", minWidth: svgW, minHeight: svgH }}>
     <svg
       ref={svgRef}
       width={svgW} height={svgH}
-      style={{ display: "block", minWidth: svgW, cursor: isDragging ? "grabbing" : "default" }}
+      style={{ display: "block", cursor: isDragging ? "grabbing" : "default" }}
       onPointerMove={onSvgPointerMove}
       onPointerUp={onSvgPointerUp}
       onPointerCancel={onSvgPointerUp}
@@ -435,13 +432,33 @@ function GraphCanvas({ tasks, allTasks, storageKey, selectedNodeId, onNodeSelect
             isActiveDrag={activeDragId === task.id}
             today={today}
             onMainPointerDown={e => onMainRectPointerDown(e, task.id)}
-            onHandlePointerDown={e => onHandlePointerDown(e, task.id)}
             onNodeClick={() => onNodeSelect(task)}
             onAddClick={() => onAddSubtask(task)}
           />
         )
       })}
     </svg>
+
+    {/* HTML overlays for move buttons — touch-action:none respected here, not in SVG child elements */}
+    {tasks.map(task => {
+      const p = positions.get(task.id)
+      if (!p) return null
+      return (
+        <div key={`mv-${task.id}`}
+          style={{
+            position: "absolute",
+            left: p.x + NODE_W - 42,
+            top:  p.y + 2,
+            width: 20, height: 20,
+            borderRadius: "50%",
+            touchAction: "none",
+            cursor: activeDragId === task.id ? "grabbing" : "grab",
+          }}
+          onPointerDown={e => startMoveDrag(e, task.id)}
+        />
+      )
+    })}
+  </div>
   )
 }
 
