@@ -11,7 +11,6 @@ const H_GAP          = 40
 const V_GAP          = 72
 const PAD            = 32
 const DRAG_THRESHOLD = 5
-const LONG_PRESS_MS  = 180
 
 function getToday() {
   return new Date().toISOString().slice(0, 10)
@@ -150,13 +149,14 @@ function AddSubModal({ parent, onAdd, onClose }: {
 
 // ── Node ─────────────────────────────────────────────────────────────────────
 
-function GraphNode({ task, p, allTasks, isSelected, isActiveDrag, onPointerDown, onAddClick, today }: {
+function GraphNode({ task, p, allTasks, isSelected, isActiveDrag, onHandlePointerDown, onNodeClick, onAddClick, today }: {
   task: Task
   p: { x: number; y: number }
   allTasks: Task[]
   isSelected: boolean
   isActiveDrag: boolean
-  onPointerDown: (e: React.PointerEvent<SVGRectElement>) => void
+  onHandlePointerDown: (e: React.PointerEvent<SVGRectElement>) => void
+  onNodeClick: () => void
   onAddClick: () => void
   today: string
 }) {
@@ -183,12 +183,13 @@ function GraphNode({ task, p, allTasks, isSelected, isActiveDrag, onPointerDown,
 
   return (
     <g>
+      {/* Main rect — click to select */}
       <rect x={p.x} y={p.y} width={NODE_W} height={NODE_H} rx="10"
         fill={isActiveDrag ? "rgba(74,222,128,0.12)" : bg}
         stroke={isActiveDrag ? "#4ade80" : border}
         strokeWidth={isSelected || isActiveDrag ? "2" : "1.5"}
-        onPointerDown={onPointerDown}
-        style={{ cursor: isActiveDrag ? "grabbing" : "grab", touchAction: "none",
+        onClick={onNodeClick}
+        style={{ cursor: "pointer",
           filter: isActiveDrag ? "drop-shadow(0 6px 16px rgba(0,0,0,0.5))" : "none" }}
       />
 
@@ -220,6 +221,22 @@ function GraphNode({ task, p, allTasks, isSelected, isActiveDrag, onPointerDown,
         <circle cx={p.x + NODE_W - 12} cy={p.y + 12} r="10" fill="#18181b" stroke="#3f3f46" strokeWidth="1.5"/>
         <text x={p.x + NODE_W - 12} y={p.y + 17} textAnchor="middle" fontSize="14" fill="#52525b" fontWeight="300">+</text>
       </g>
+
+      {/* Drag handle — left 16px, transparent overlay */}
+      <rect x={p.x} y={p.y} width={16} height={NODE_H} rx="10 0 0 10"
+        fill="transparent"
+        onPointerDown={onHandlePointerDown}
+        style={{ cursor: isActiveDrag ? "grabbing" : "grab", touchAction: "none" }}
+      />
+      {/* Grip visual */}
+      {([0.33, 0.5, 0.67] as number[]).map((ratio, i) => (
+        <line key={i}
+          x1={p.x + 5} y1={p.y + NODE_H * ratio}
+          x2={p.x + 11} y2={p.y + NODE_H * ratio}
+          stroke="#52525b" strokeWidth="1.5" strokeLinecap="round"
+          style={noEvt}
+        />
+      ))}
     </g>
   )
 }
@@ -248,11 +265,9 @@ function GraphCanvas({ tasks, allTasks, storageKey, selectedNodeId, onNodeSelect
   const [isDragging,   setIsDragging]   = useState(false)
   const [activeDragId, setActiveDragId] = useState<number | null>(null)
 
-  const svgRef         = useRef<SVGSVGElement>(null)
-  const dragRef        = useRef<{ id: number; sx: number; sy: number; ox: number; oy: number } | null>(null)
-  const hasMoved       = useRef(false)
-  const isDragActive   = useRef(false)
-  const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const svgRef     = useRef<SVGSVGElement>(null)
+  const dragRef    = useRef<{ id: number; sx: number; sy: number; ox: number; oy: number } | null>(null)
+  const hasMoved   = useRef(false)
 
   useEffect(() => {
     const saved    = loadPositions(storageKey)
@@ -271,30 +286,15 @@ function GraphCanvas({ tasks, allTasks, storageKey, selectedNodeId, onNodeSelect
   const svgW  = Math.max(460, Math.max(...xs) + NODE_W + PAD * 2)
   const svgH  = Math.max(160, Math.max(...ys) + NODE_H + PAD * 2)
 
-  function onNodePointerDown(e: React.PointerEvent<SVGRectElement>, taskId: number) {
+  function onHandlePointerDown(e: React.PointerEvent<SVGRectElement>, taskId: number) {
     const p = positions.get(taskId)
     if (!p) return
+    e.stopPropagation()
+    svgRef.current?.setPointerCapture(e.pointerId)
     hasMoved.current = false
     dragRef.current  = { id: taskId, sx: e.clientX, sy: e.clientY, ox: p.x, oy: p.y }
-
-    if (e.pointerType === "mouse") {
-      e.preventDefault()
-      svgRef.current?.setPointerCapture(e.pointerId)
-      isDragActive.current = true
-      setIsDragging(true)
-      setActiveDragId(taskId)
-    } else {
-      const pid = e.pointerId
-      longPressTimer.current = setTimeout(() => {
-        longPressTimer.current = null
-        if (dragRef.current?.id === taskId) {
-          svgRef.current?.setPointerCapture(pid)
-          isDragActive.current = true
-          setIsDragging(true)
-          setActiveDragId(taskId)
-        }
-      }, LONG_PRESS_MS)
-    }
+    setIsDragging(true)
+    setActiveDragId(taskId)
   }
 
   function onSvgPointerMove(e: React.PointerEvent<SVGSVGElement>) {
@@ -302,17 +302,6 @@ function GraphCanvas({ tasks, allTasks, storageKey, selectedNodeId, onNodeSelect
     if (!d) return
     const dx = e.clientX - d.sx
     const dy = e.clientY - d.sy
-
-    if (longPressTimer.current !== null) {
-      if (Math.abs(dx) > 5 || Math.abs(dy) > 5) {
-        clearTimeout(longPressTimer.current)
-        longPressTimer.current = null
-        dragRef.current = null
-      }
-      return
-    }
-
-    if (!isDragActive.current) return
     if (!hasMoved.current && (Math.abs(dx) > DRAG_THRESHOLD || Math.abs(dy) > DRAG_THRESHOLD)) {
       hasMoved.current = true
     }
@@ -325,28 +314,15 @@ function GraphCanvas({ tasks, allTasks, storageKey, selectedNodeId, onNodeSelect
   }
 
   function onSvgPointerUp(e: React.PointerEvent<SVGSVGElement>) {
-    if (longPressTimer.current !== null) {
-      clearTimeout(longPressTimer.current)
-      longPressTimer.current = null
-    }
     const d = dragRef.current
-    dragRef.current      = null
-    isDragActive.current = false
+    dragRef.current = null
     setIsDragging(false)
     setActiveDragId(null)
     try { svgRef.current?.releasePointerCapture(e.pointerId) } catch {}
-
     if (hasMoved.current) {
       setPositions(prev => { savePositions(storageKey, prev); return prev })
-      hasMoved.current = false
-      return
     }
     hasMoved.current = false
-
-    if (d === null) return
-    const task = tasks.find(t => t.id === d.id)
-    if (!task) return
-    onNodeSelect(task)
   }
 
   return (
@@ -430,7 +406,8 @@ function GraphCanvas({ tasks, allTasks, storageKey, selectedNodeId, onNodeSelect
             isSelected={selectedNodeId === task.id}
             isActiveDrag={activeDragId === task.id}
             today={today}
-            onPointerDown={e => onNodePointerDown(e, task.id)}
+            onHandlePointerDown={e => onHandlePointerDown(e, task.id)}
+            onNodeClick={() => onNodeSelect(task)}
             onAddClick={() => onAddSubtask(task)}
           />
         )

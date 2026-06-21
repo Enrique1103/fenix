@@ -1,13 +1,12 @@
 "use client"
 
 import { useState, useEffect, useRef, useCallback } from "react"
-import { Check, Pencil, Trash2, X, Plus } from "lucide-react"
+import { Check, Pencil, Trash2, X, Plus, GripVertical } from "lucide-react"
 import { Goal } from "@/lib/types"
 import { getGoalsGraph, addGoalDep, removeGoalDep } from "@/lib/api"
 
 const STORAGE_KEY    = "fenix_goal_graph_positions"
 const DRAG_THRESHOLD = 5
-const LONG_PRESS_MS  = 180
 
 interface Pos { x: number; y: number }
 
@@ -28,19 +27,10 @@ export function GoalGraph({ goals, onEdit, onComplete, onDelete }: {
   const [selected, setSelected]  = useState<number | null>(null)
   const [connectFrom, setConnectFrom] = useState<number | null>(null)
   const [hoveredDep, setHoveredDep] = useState<string | null>(null)
-  const [draggingId, setDraggingId]     = useState<number | null>(null)
-  const containerRef   = useRef<HTMLDivElement>(null)
-  const dragRef        = useRef<{ id: number; ox: number; oy: number; sx: number; sy: number } | null>(null)
-  const hasMoved       = useRef(false)
-  const isDragActive   = useRef(false)
-  const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
-
-  function cancelLongPress() {
-    if (longPressTimer.current !== null) {
-      clearTimeout(longPressTimer.current)
-      longPressTimer.current = null
-    }
-  }
+  const [draggingId, setDraggingId] = useState<number | null>(null)
+  const containerRef = useRef<HTMLDivElement>(null)
+  const dragRef      = useRef<{ id: number; ox: number; oy: number; sx: number; sy: number } | null>(null)
+  const hasMoved     = useRef(false)
 
   const loadGraph = useCallback(async () => {
     try {
@@ -69,8 +59,10 @@ export function GoalGraph({ goals, onEdit, onComplete, onDelete }: {
     setPositions(pos)
   }
 
-  function onPointerDown(e: React.PointerEvent<HTMLDivElement>, id: number) {
+  function onHandlePointerDown(e: React.PointerEvent<HTMLDivElement>, id: number) {
+    e.stopPropagation()
     if (connectFrom !== null) return
+    e.currentTarget.setPointerCapture(e.pointerId)
     hasMoved.current = false
     dragRef.current = {
       id,
@@ -79,40 +71,14 @@ export function GoalGraph({ goals, onEdit, onComplete, onDelete }: {
       sx: e.clientX,
       sy: e.clientY,
     }
-
-    if (e.pointerType === "mouse") {
-      e.currentTarget.setPointerCapture(e.pointerId)
-      isDragActive.current = true
-      setDraggingId(id)
-    } else {
-      const el  = e.currentTarget
-      const pid = e.pointerId
-      longPressTimer.current = setTimeout(() => {
-        longPressTimer.current = null
-        if (dragRef.current?.id === id) {
-          el.setPointerCapture(pid)
-          isDragActive.current = true
-          setDraggingId(id)
-        }
-      }, LONG_PRESS_MS)
-    }
+    setDraggingId(id)
   }
 
-  function onPointerMove(e: React.PointerEvent) {
+  function onHandlePointerMove(e: React.PointerEvent) {
     const d = dragRef.current
     if (!d) return
     const dx = e.clientX - d.sx
     const dy = e.clientY - d.sy
-
-    if (longPressTimer.current !== null) {
-      if (Math.abs(dx) > 5 || Math.abs(dy) > 5) {
-        cancelLongPress()
-        dragRef.current = null
-      }
-      return
-    }
-
-    if (!isDragActive.current) return
     if (!hasMoved.current && (Math.abs(dx) > DRAG_THRESHOLD || Math.abs(dy) > DRAG_THRESHOLD)) {
       hasMoved.current = true
     }
@@ -121,24 +87,22 @@ export function GoalGraph({ goals, onEdit, onComplete, onDelete }: {
     }
   }
 
-  function onPointerUp(e: React.PointerEvent) {
-    cancelLongPress()
+  function onHandlePointerUp(e: React.PointerEvent) {
     const d = dragRef.current
-    if (!d) { isDragActive.current = false; setDraggingId(null); return }
+    if (!d) { setDraggingId(null); return }
     try { e.currentTarget.releasePointerCapture(e.pointerId) } catch {}
     if (hasMoved.current) {
       const dx = e.clientX - d.sx
       const dy = e.clientY - d.sy
       savePositions({ ...positions, [d.id]: { x: d.ox + dx, y: d.oy + dy } })
     }
-    dragRef.current      = null
-    hasMoved.current     = false
-    isDragActive.current = false
+    dragRef.current  = null
+    hasMoved.current = false
     setDraggingId(null)
   }
 
   async function handleNodeClick(id: number) {
-    if (hasMoved.current || isDragActive.current) return
+    if (hasMoved.current) return
     if (connectFrom !== null) {
       if (connectFrom !== id) {
         await addGoalDep(id, connectFrom)
@@ -231,7 +195,7 @@ export function GoalGraph({ goals, onEdit, onComplete, onDelete }: {
           return (
             <div
               key={goal.id}
-              className="absolute select-none touch-none cursor-pointer rounded-xl px-3 py-2.5"
+              className="absolute select-none cursor-pointer rounded-xl overflow-hidden"
               style={{
                 left: pos.x, top: pos.y,
                 width: NODE_W, height: NODE_H,
@@ -244,18 +208,32 @@ export function GoalGraph({ goals, onEdit, onComplete, onDelete }: {
                 transition: "transform 0.12s ease, box-shadow 0.12s ease",
                 zIndex: isDragging ? 10 : 1,
               }}
-              onPointerDown={e => onPointerDown(e, goal.id)}
-              onPointerMove={onPointerMove}
-              onPointerUp={onPointerUp}
-              onPointerCancel={onPointerUp}
               onClick={() => handleNodeClick(goal.id)}
             >
-              <p className="text-xs font-semibold leading-tight truncate" style={{ color: text }}>
-                {goal.title}
-              </p>
-              <p className="text-[9px] text-zinc-600 mt-0.5 truncate">
-                {goal.goal_type === "action" ? "Acción" : "Mentalización"} · {goal.horizon === "short" ? "Corto" : "Largo"}
-              </p>
+              <div className="flex h-full">
+                {/* Drag handle */}
+                <div
+                  className="shrink-0 w-6 flex items-center justify-center cursor-grab active:cursor-grabbing"
+                  style={{ touchAction: "none" }}
+                  onPointerDown={e => onHandlePointerDown(e, goal.id)}
+                  onPointerMove={onHandlePointerMove}
+                  onPointerUp={onHandlePointerUp}
+                  onPointerCancel={onHandlePointerUp}
+                  onClick={e => e.stopPropagation()}
+                >
+                  <GripVertical size={10} className="text-zinc-500/50"/>
+                </div>
+
+                {/* Content */}
+                <div className="flex-1 min-w-0 py-2.5 pr-6">
+                  <p className="text-xs font-semibold leading-tight truncate" style={{ color: text }}>
+                    {goal.title}
+                  </p>
+                  <p className="text-[9px] text-zinc-600 mt-0.5 truncate">
+                    {goal.goal_type === "action" ? "Acción" : "Mentalización"} · {goal.horizon === "short" ? "Corto" : "Largo"}
+                  </p>
+                </div>
+              </div>
 
               {/* Connect button */}
               <button
