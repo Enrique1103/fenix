@@ -384,28 +384,28 @@ export default function TasksPage() {
               {completed.length > 0 ? ` · ${completed.length} completada${completed.length !== 1 ? "s" : ""}` : ""}
             </p>
           </div>
-          <div className="flex items-center gap-1 bg-zinc-800/60 p-1 rounded-xl">
-            <button onClick={() => setView("list")}
-              className={`p-1.5 rounded-lg transition-colors ${view === "list" ? "bg-zinc-700 text-zinc-100" : "text-zinc-500 hover:text-zinc-300"}`}
-              title="Vista lista">
-              <List size={14}/>
-            </button>
-            <button onClick={() => setView("graph")}
-              className={`p-1.5 rounded-lg transition-colors ${view === "graph" ? "bg-zinc-700 text-zinc-100" : "text-zinc-500 hover:text-zinc-300"}`}
-              title="Vista grafo">
-              <Network size={14}/>
+          <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1 bg-zinc-800/60 p-1 rounded-xl">
+              <button onClick={() => setView("list")}
+                className={`p-1.5 rounded-lg transition-colors ${view === "list" ? "bg-zinc-700 text-zinc-100" : "text-zinc-500 hover:text-zinc-300"}`}
+                title="Vista lista">
+                <List size={14}/>
+              </button>
+              <button onClick={() => setView("graph")}
+                className={`p-1.5 rounded-lg transition-colors ${view === "graph" ? "bg-zinc-700 text-zinc-100" : "text-zinc-500 hover:text-zinc-300"}`}
+                title="Vista grafo">
+                <Network size={14}/>
+              </button>
+            </div>
+            <button onClick={() => setShowForm(true)}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-green-500/10 border border-green-500/30 text-green-400 text-xs font-medium hover:bg-green-500/20 transition-colors">
+              <Plus size={14}/> Nueva
             </button>
           </div>
         </div>
       </div>
 
       <div className="p-4 space-y-4">
-
-        <button onClick={() => setShowForm(true)}
-          className="w-full flex items-center gap-2 py-3 px-4 rounded-2xl border border-dashed border-zinc-700 text-zinc-500 hover:border-green-500/50 hover:text-green-400 transition-colors">
-          <Plus size={16}/>
-          <span className="text-sm">Nueva tarea</span>
-        </button>
 
         {showForm && (
           <AddForm onAdd={handleAddRoot} onCancel={() => setShowForm(false)}/>
