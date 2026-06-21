@@ -253,7 +253,7 @@ function MonthlyView({
           {habits.map((habit, idx) => (
             <tr key={habit.id} className={idx % 2 === 0 ? "" : "bg-zinc-900/20"}>
               <td className="sticky left-0 z-10 bg-[var(--sticky-bg)] border-b border-slate-700/25 px-3 py-1">
-                <span className="text-sm text-zinc-200 whitespace-nowrap">{habit.name}</span>
+                <span className="text-sm text-zinc-200 block max-w-[140px] truncate">{habit.name}</span>
               </td>
               {allDays.map(day => {
                 const ds = dateStr(year, month, day)

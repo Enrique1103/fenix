@@ -155,7 +155,7 @@ function GoalBody({ goal, habits, progress, onEdit, onDelete, onComplete }: Goal
       </div>
 
       {goal.description && (
-        <p className="text-xs text-zinc-400 leading-snug">{goal.description}</p>
+        <p className="text-xs text-zinc-400 leading-snug break-words">{goal.description}</p>
       )}
 
       {goal.habit_ids.length > 0 && progress && (
@@ -165,7 +165,7 @@ function GoalBody({ goal, habits, progress, onEdit, onDelete, onComplete }: Goal
       {goal.commitment && (
         <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl px-3 py-2">
           <p className="text-[10px] text-amber-400 font-medium">Compromiso</p>
-          <p className="text-xs text-zinc-300 mt-0.5">{goal.commitment}</p>
+          <p className="text-xs text-zinc-300 mt-0.5 break-words">{goal.commitment}</p>
         </div>
       )}
 

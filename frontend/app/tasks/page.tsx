@@ -248,7 +248,7 @@ function TaskNode({ task, allTasks, onToggle, onDelete, onOpenDeps, onAddTask, o
 
           <div className="flex-1 min-w-0">
             <p onClick={() => onOpenDetail(task)}
-              className={`text-sm leading-snug cursor-pointer hover:text-green-300 transition-colors
+              className={`text-sm leading-snug break-words cursor-pointer hover:text-green-300 transition-colors
                 ${task.completed ? "line-through text-zinc-500" : blocked ? "text-zinc-500" : "text-zinc-100"}`}>
               {task.title}
             </p>
@@ -260,9 +260,9 @@ function TaskNode({ task, allTasks, onToggle, onDelete, onOpenDeps, onAddTask, o
                 </span>
               )}
               {pendingDeps.length > 0 && (
-                <span className="text-xs text-amber-500/80 flex items-center gap-1">
-                  <Lock size={9}/>
-                  {pendingDeps.map(d => d.title).join(", ")}
+                <span className="text-xs text-amber-500/80 flex items-center gap-1 min-w-0">
+                  <Lock size={9} className="shrink-0"/>
+                  <span className="truncate">{pendingDeps.map(d => d.title).join(", ")}</span>
                 </span>
               )}
             </div>
