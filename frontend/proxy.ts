@@ -4,7 +4,6 @@ import type { NextRequest } from "next/server"
 
 export async function proxy(req: NextRequest) {
   const res = NextResponse.next()
-  const { pathname } = req.nextUrl
 
   try {
     const supabase = createServerClient(
@@ -19,18 +18,9 @@ export async function proxy(req: NextRequest) {
         },
       }
     )
-
-    const { data: { session } } = await supabase.auth.getSession()
-
-    if (!session && pathname !== "/login") {
-      return NextResponse.redirect(new URL("/login", req.url))
-    }
-    if (session && pathname === "/login") {
-      return NextResponse.redirect(new URL("/", req.url))
-    }
-  } catch {
-    // Si falla el check de sesión, dejamos pasar para evitar pantalla en blanco
-  }
+    // Refresca la cookie de sesión si está por vencer — sin redirigir
+    await supabase.auth.getSession()
+  } catch {}
 
   return res
 }
