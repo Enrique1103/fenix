@@ -1,17 +1,18 @@
 "use client"
 
-import { useEffect, useState, useRef, useCallback } from "react"
+import { useEffect, useState, useRef } from "react"
 import { ChevronLeft, ChevronRight, Plus, Check, ChevronDown, Pencil, Trash2, X } from "lucide-react"
 import {
-  getDayView, getTemplates, setDayOverride,
+  setDayOverride,
   createTemplate, deleteTemplate,
   createBlock, updateBlock, deleteBlock,
   createDayBlock, updateDayBlock, deleteDayBlock,
   completeBlock,
-  getCategories, createCategory,
-  setRecord, getTasks, updateTask, setBlockDayTask,
+  createCategory,
+  setRecord, updateTask, setBlockDayTask,
 } from "@/lib/api"
 import { RoutineTemplate, RoutineBlock, RoutineDayBlock, RoutineDayView, RoutineCategory, Task } from "@/lib/types"
+import { useTasks, useDayView, useTemplates, useCategories } from "@/lib/swr-hooks"
 
 // ── Constantes ────────────────────────────────────────────────────────────────
 
@@ -236,11 +237,8 @@ function BlockModal({
     ?? (block as RoutineBlock)?.task_id
     ?? null
   )
-  const [tasks, setTasks]               = useState<Task[]>([])
-
-  useEffect(() => {
-    getTasks().then(t => setTasks(t.filter(tk => !tk.completed))).catch(() => {})
-  }, [])
+  const { data: allFetchedTasks = [] } = useTasks()
+  const tasks = allFetchedTasks.filter(tk => !tk.completed)
 
   const allCategories = [
     ...baseCategories.map(c => ({ id: c.slug, label: c.label, color: c.color })),
@@ -570,12 +568,8 @@ function TmplModal({ onClose, name, setName, onCreate }: {
 // ── Página principal ──────────────────────────────────────────────────────────
 
 export default function RoutinePage() {
-  const [date, setDate]           = useState(new Date())
-  const [dayView, setDayView]     = useState<RoutineDayView | null>(null)
-  const [templates, setTemplates] = useState<RoutineTemplate[]>([])
-  const [categories, setCategories] = useState<RoutineCategory[]>([])
-  const [loading, setLoading]     = useState(true)
-  const [nowPx, setNowPx]         = useState(-1)
+  const [date, setDate] = useState(new Date())
+  const [nowPx, setNowPx] = useState(-1)
 
   const [modal, setModal] = useState<{
     open: boolean
@@ -594,21 +588,9 @@ export default function RoutinePage() {
 
   const dateStr = toISODate(date)
 
-  const load = useCallback(async () => {
-    setLoading(true)
-    try {
-      const [view, tmpl, cats] = await Promise.all([
-        getDayView(dateStr),
-        getTemplates(),
-        getCategories(),
-      ])
-      setDayView(view)
-      setTemplates(tmpl)
-      setCategories(cats)
-    } finally { setLoading(false) }
-  }, [dateStr])
-
-  useEffect(() => { load() }, [load])
+  const { data: dayView, isLoading: loading, mutate: mutateDayView } = useDayView(dateStr)
+  const { data: templates = [], mutate: mutateTemplates } = useTemplates()
+  const { data: categories = [], mutate: mutateCategories } = useCategories()
 
   useEffect(() => {
     setNowPx(nowTopPx())
@@ -662,8 +644,8 @@ export default function RoutinePage() {
       const patch = { start_time: minutesToTime(newStart), end_time: minutesToTime(newEnd) }
       if (d.isDay) await updateDayBlock(d.blockId, patch)
       else await updateBlock(d.blockId, patch)
-      load()
-    } catch { load() }
+      mutateDayView()
+    } catch { mutateDayView() }
   }
 
   // ── Completar bloque ──────────────────────────────────────────────────────
@@ -677,8 +659,8 @@ export default function RoutinePage() {
       } else {
         await completeBlock(blockId, dateStr, next)
       }
-      load()
-    } catch { load() }
+      mutateDayView()
+    } catch { mutateDayView() }
   }
 
   // ── Render ────────────────────────────────────────────────────────────────
@@ -721,11 +703,11 @@ export default function RoutinePage() {
                 ${dayView?.template?.id === t.id
                   ? "bg-green-500/12 border-green-500/25 text-green-400 font-semibold"
                   : "bg-zinc-900/60 border-slate-700/40 text-zinc-500"}`}>
-                <button onClick={() => setDayOverride(dateStr, t.id).then(load)}>
+                <button onClick={() => setDayOverride(dateStr, t.id).then(() => mutateDayView())}>
                   {t.name}
                 </button>
                 <button
-                  onClick={() => deleteTemplate(t.id).then(load)}
+                  onClick={() => deleteTemplate(t.id).then(() => { mutateDayView(); mutateTemplates() })}
                   className="ml-0.5 text-zinc-600 hover:text-red-400 transition-colors leading-none">
                   ×
                 </button>
@@ -879,12 +861,11 @@ export default function RoutinePage() {
           habits={dayView?.habits ?? []}
           baseCategories={BASE_CATEGORIES}
           customCategories={categories}
-          onSave={load}
+          onSave={mutateDayView}
           onClose={() => setModal({ open: false, mode: "create", isDay: true, block: null })}
           onAddCategory={async (label, color) => {
             await createCategory({ label, color })
-            const cats = await getCategories()
-            setCategories(cats)
+            await mutateCategories()
           }}
         />
       )}
@@ -900,7 +881,7 @@ export default function RoutinePage() {
             await createTemplate({ name: newTmplName.trim() })
             setNewTmplName("")
             setTmplModal(false)
-            load()
+            mutateTemplates()
           }}
         />
       )}

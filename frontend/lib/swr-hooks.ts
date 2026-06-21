@@ -3,9 +3,10 @@ import {
   getTasks, getGoals, getHabits,
   getMonthAll, getMonthSummary, getMonthMood, getStreak,
   getMonthStats, getRecovery, getMoodAvg,
+  getDayView, getTemplates, getCategories,
   type MonthStats, type RecoveryStats,
 } from "./api"
-import type { Task, Goal, Habit } from "./types"
+import type { Task, Goal, Habit, RoutineDayView, RoutineTemplate, RoutineCategory } from "./types"
 
 const opts = { revalidateOnFocus: false, dedupingInterval: 5000 }
 
@@ -53,6 +54,18 @@ export function useStatsData(year: number, month: number) {
     ])
     return { stats: s, prevStats: p, streak: streakRes, recovery: recoveryRes, moodAvg: mood.avg }
   }, opts)
+}
+
+export function useDayView(dateStr: string) {
+  return useSWR<RoutineDayView>(["dayView", dateStr], () => getDayView(dateStr), opts)
+}
+
+export function useTemplates() {
+  return useSWR<RoutineTemplate[]>("templates", getTemplates, opts)
+}
+
+export function useCategories() {
+  return useSWR<RoutineCategory[]>("categories", getCategories, opts)
 }
 
 export function useHomeData(year: number, month: number) {
