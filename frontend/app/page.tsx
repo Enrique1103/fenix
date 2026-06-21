@@ -644,9 +644,11 @@ export default function HabitTrackerPage() {
             <Plus size={15}/> Crear primer hábito
           </button>
         </div>
-      ) : view === "weekly" ? (
-        <div className="mt-6">
-        <div className="px-4 pb-1"><SuggestedTaskCard/></div>
+      ) : (
+        <>
+        <div className="px-4 pt-3 pb-1"><SuggestedTaskCard/></div>
+        {view === "weekly" ? (
+        <div className="mt-2">
         <WeeklyView
           weeks={weeks}
           habits={habits}
@@ -659,8 +661,8 @@ export default function HabitTrackerPage() {
           onMoodOpen={openMoodPicker}
         />
         </div>
-      ) : (
-        <div className="mt-6">
+        ) : (
+        <div className="mt-2">
         <MonthlyView
           habits={habits}
           matrix={matrix}
@@ -672,6 +674,8 @@ export default function HabitTrackerPage() {
           onMoodOpen={openMoodPicker}
         />
         </div>
+        )}
+        </>
       )}
 
       <div className="pb-10"/>

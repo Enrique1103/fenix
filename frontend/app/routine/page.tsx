@@ -263,7 +263,8 @@ function BlockModal({
       }
       if (mode === "create") {
         if (saveToTemplate && templateId) {
-          await createBlock({ ...data, template_id: templateId, ord: 0 })
+          const newBlock = await createBlock({ ...data, template_id: templateId, ord: 0 })
+          if (taskId) await setBlockDayTask(newBlock.id, date, taskId)
         } else {
           await createDayBlock({ ...data, date })
         }
@@ -442,8 +443,8 @@ function BlockModal({
           </div>
         )}
 
-        {/* Tarea del día (solo para bloques de plantilla en modo edición) */}
-        {!isDay && mode === "edit" && tasks.length > 0 && (
+        {/* Tarea del día (solo para bloques de plantilla) */}
+        {!isDay && tasks.length > 0 && (
           <div className="mb-3">
             <label className="text-[10px] uppercase tracking-widest text-zinc-600 mb-1.5 block">
               Tarea de hoy (opcional)

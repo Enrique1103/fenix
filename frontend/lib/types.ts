@@ -58,7 +58,7 @@ export interface Task {
   id: number
   title: string
   description: string | null
-  type?: string
+  type?: string  // legacy — no longer used in UI, kept for DB compat
   deadline: string | null
   completed: boolean
   created_at: string

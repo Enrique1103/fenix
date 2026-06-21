@@ -110,9 +110,17 @@ export function GoalGraph({ goals, onEdit, onComplete, onDelete }: {
   return (
     <div className="relative">
       {connectFrom !== null && (
-        <div className="mb-3 px-3 py-2 rounded-xl bg-cyan-500/10 border border-cyan-500/25 text-xs text-cyan-400 flex items-center justify-between">
-          <span>Haz clic en otra meta para crear la dependencia</span>
-          <button onClick={() => setConnectFrom(null)}><X size={13}/></button>
+        <div className="mb-3 px-3 py-2 rounded-xl bg-cyan-500/10 border border-cyan-500/25 text-xs text-cyan-400 flex items-center justify-between gap-3">
+          <div className="space-y-0.5">
+            <p className="font-medium">
+              Origen: <span className="text-white">{goals.find(g => g.id === connectFrom)?.title}</span>
+            </p>
+            <p className="text-cyan-500/80">
+              Ahora hacé clic en la meta que es <span className="text-cyan-300 font-medium">prerequisito</span> de esta
+              — la flecha irá de esa meta hacia la tuya
+            </p>
+          </div>
+          <button onClick={() => setConnectFrom(null)} className="shrink-0"><X size={13}/></button>
         </div>
       )}
 

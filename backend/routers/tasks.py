@@ -114,7 +114,9 @@ def get_suggested_task(user_id: str = Depends(get_user_id)):
     if not tasks:
         return {"task": None, "reason": None}
 
-    deps_res = db.table("task_deps").select("task_id, depends_on_task_id").execute()
+    my_task_ids = [t["id"] for t in tasks]
+    deps_res = db.table("task_deps").select("task_id, depends_on_task_id")\
+        .in_("depends_on_task_id", my_task_ids).execute()
     blocks_count: dict[int, int] = {}
     for d in deps_res.data:
         dep_id = d["depends_on_task_id"]

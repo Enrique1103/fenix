@@ -325,7 +325,7 @@ function ViewToggle({ view, onChange }: { view: ViewMode; onChange: (v: ViewMode
 
 // ── AchievementsTab ───────────────────────────────────────────────────────────
 
-function AchievementsTab() {
+function AchievementsTab({ onReopened }: { onReopened: () => void }) {
   const [goals, setGoals] = useState<Goal[]>([])
   const [loading, setLoading] = useState(true)
 
@@ -369,6 +369,7 @@ function AchievementsTab() {
             onClick={() => {
               import("@/lib/api").then(({ reopenGoal }) => reopenGoal(g.id).then(() => {
                 setGoals(prev => prev.filter(x => x.id !== g.id))
+                onReopened()
               }))
             }}
             className="text-[10px] text-zinc-600 hover:text-amber-400 transition-colors px-2 py-1 rounded-lg hover:bg-amber-500/10">
@@ -663,7 +664,7 @@ export default function GoalsPage() {
 
       <div className="p-4 space-y-3">
         {tab === "achievements" ? (
-          <AchievementsTab/>
+          <AchievementsTab onReopened={() => { load(); setTab("active") }}/>
         ) : loading ? (
           <div className="space-y-3">
             {[1, 2].map(i => <div key={i} className="h-20 bg-zinc-900 rounded-2xl animate-pulse"/>)}
