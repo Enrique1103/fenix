@@ -110,10 +110,11 @@ function DepPickerModal({ task, allTasks, onAdd, onRemove, onClose }: {
   )
 }
 
-// ── Add form ──────────────────────────────────────────────────────────────────
+// ── Add form modal ────────────────────────────────────────────────────────────
 
-function AddForm({ parentId, onAdd, onCancel }: {
+function AddForm({ parentId, parentTitle, onAdd, onCancel }: {
   parentId?: number
+  parentTitle?: string
   onAdd: (title: string, deadline: string, parentId?: number, description?: string) => Promise<void>
   onCancel: () => void
 }) {
@@ -129,26 +130,60 @@ function AddForm({ parentId, onAdd, onCancel }: {
     finally { setSaving(false) }
   }
 
+  const isSubtask = parentId !== undefined
+
   return (
-    <div className="gc p-3 space-y-2">
-      <input autoFocus value={title} onChange={e => setTitle(e.target.value)}
-        onKeyDown={e => { if (e.key === "Enter") handleAdd(); if (e.key === "Escape") onCancel() }}
-        placeholder={parentId !== undefined ? "Título de la subtarea…" : "Título de la tarea…"}
-        className="w-full bg-zinc-800 rounded-xl px-3 py-2 text-sm text-zinc-100 placeholder:text-zinc-600 focus:outline-none focus:ring-1 focus:ring-green-500/50"/>
-      <textarea value={description} onChange={e => setDescription(e.target.value)}
-        placeholder="Descripción (opcional)"
-        rows={2}
-        className="w-full bg-zinc-800 rounded-xl px-3 py-2 text-sm text-zinc-400 placeholder:text-zinc-600 focus:outline-none focus:ring-1 focus:ring-green-500/50 resize-none"/>
-      <div className="flex items-center gap-2">
-        <DateInput value={deadline || null} onChange={v => setDeadline(v ?? "")}
-          placeholder="Fecha límite" className="flex-1"/>
-        <button onClick={handleAdd} disabled={!title.trim() || saving}
-          className="px-3 py-1.5 rounded-xl bg-green-500 hover:bg-green-400 disabled:opacity-40 text-xs font-semibold text-black transition-colors">
-          {saving ? "…" : "Agregar"}
-        </button>
-        <button onClick={onCancel} className="p-1.5 rounded-xl text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800 transition-colors">
-          <X size={14}/>
-        </button>
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/70 backdrop-blur-sm px-4 pb-4"
+      onClick={onCancel}>
+      <div className="w-full max-w-lg bg-zinc-900 border border-slate-700/40 rounded-2xl overflow-hidden"
+        onClick={e => e.stopPropagation()}>
+
+        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-700/40">
+          <h2 className="font-semibold text-zinc-100">
+            {isSubtask ? `Subtarea de "${parentTitle}"` : "Nueva tarea"}
+          </h2>
+          <button onClick={onCancel} className="p-1 text-zinc-500 hover:text-zinc-300 transition-colors">
+            <X size={18}/>
+          </button>
+        </div>
+
+        <div className="p-5 space-y-4 max-h-[70vh] overflow-y-auto">
+
+          <div className="space-y-1">
+            <label className="text-xs text-zinc-400">Título *</label>
+            <input
+              autoFocus value={title} onChange={e => setTitle(e.target.value)}
+              onKeyDown={e => { if (e.key === "Enter" && title.trim()) handleAdd(); if (e.key === "Escape") onCancel() }}
+              placeholder={isSubtask ? "Título de la subtarea…" : "¿Qué hay que hacer?"}
+              className="w-full bg-zinc-800 rounded-xl px-3 py-2.5 text-sm text-zinc-100 placeholder:text-zinc-600 focus:outline-none focus:ring-1 focus:ring-green-500/50"/>
+          </div>
+
+          <div className="space-y-1">
+            <label className="text-xs text-zinc-400">Descripción</label>
+            <textarea
+              value={description} onChange={e => setDescription(e.target.value)}
+              placeholder="¿Qué hay que hacer exactamente?"
+              rows={2}
+              className="w-full bg-zinc-800 rounded-xl px-3 py-2.5 text-sm text-zinc-100 placeholder:text-zinc-600 focus:outline-none focus:ring-1 focus:ring-green-500/50 resize-none"/>
+          </div>
+
+          <div className="space-y-1">
+            <label className="text-xs text-zinc-400">Fecha límite</label>
+            <DateInput value={deadline || null} onChange={v => setDeadline(v ?? "")} placeholder="Sin fecha límite"/>
+          </div>
+
+          <div className="flex gap-2 pt-1">
+            <button onClick={onCancel}
+              className="flex-1 py-2.5 rounded-xl border border-slate-700/40 text-zinc-500 text-sm hover:text-zinc-300 transition-colors">
+              Cancelar
+            </button>
+          </div>
+
+          <button onClick={handleAdd} disabled={!title.trim() || saving}
+            className="w-full py-3 rounded-xl bg-green-500 hover:bg-green-400 disabled:opacity-40 text-sm font-semibold text-black transition-colors">
+            {saving ? "Creando…" : isSubtask ? "Crear subtarea" : "Crear tarea"}
+          </button>
+        </div>
       </div>
     </div>
   )
@@ -270,6 +305,7 @@ function TaskNode({ task, allTasks, onToggle, onDelete, onOpenDeps, onAddTask, o
           {addingSub && (
             <AddForm
               parentId={task.id}
+              parentTitle={task.title}
               onAdd={handleSubAdd}
               onCancel={() => setAddingSub(false)}
             />
@@ -365,14 +401,14 @@ export default function TasksPage() {
 
       <div className="p-4 space-y-4">
 
-        {showForm ? (
+        <button onClick={() => setShowForm(true)}
+          className="w-full flex items-center gap-2 py-3 px-4 rounded-2xl border border-dashed border-zinc-700 text-zinc-500 hover:border-green-500/50 hover:text-green-400 transition-colors">
+          <Plus size={16}/>
+          <span className="text-sm">Nueva tarea</span>
+        </button>
+
+        {showForm && (
           <AddForm onAdd={handleAddRoot} onCancel={() => setShowForm(false)}/>
-        ) : (
-          <button onClick={() => setShowForm(true)}
-            className="w-full flex items-center gap-2 py-3 px-4 rounded-2xl border border-dashed border-zinc-700 text-zinc-500 hover:border-green-500/50 hover:text-green-400 transition-colors">
-            <Plus size={16}/>
-            <span className="text-sm">Nueva tarea</span>
-          </button>
         )}
 
         {loading ? (
