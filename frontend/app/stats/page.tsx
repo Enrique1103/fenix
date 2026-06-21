@@ -2,8 +2,8 @@
 
 import { useEffect, useState, useRef } from "react"
 import { ChevronLeft, ChevronRight } from "lucide-react"
-import { getMonthStats, getRecovery, getStreak, getMoodAvg, MonthStats, RecoveryStats } from "@/lib/api"
 import { MONTHS } from "@/lib/utils"
+import { useStatsData } from "@/lib/swr-hooks"
 import { semanticColor, semanticClass, recoveryColor } from "@/lib/color"
 
 // ── Donut chart (Canvas 2D puro) ──────────────────────────────────────────────
@@ -54,35 +54,15 @@ function DonutChart({ data, colors, size = 130, cutout = 0.75 }: {
 
 export default function StatsPage() {
   const now = new Date()
-  const [year, setYear]       = useState(now.getFullYear())
-  const [month, setMonth]     = useState(now.getMonth() + 1)
-  const [stats, setStats]     = useState<MonthStats | null>(null)
-  const [prevStats, setPrev]  = useState<MonthStats | null>(null)
-  const [recovery, setRecovery] = useState<RecoveryStats | null>(null)
-  const [streak, setStreak]   = useState({ streak_current: 0, streak_best: 0 })
-  const [moodAvg, setMoodAvg] = useState<number | null>(null)
-  const [loading, setLoading] = useState(true)
+  const [year, setYear]   = useState(now.getFullYear())
+  const [month, setMonth] = useState(now.getMonth() + 1)
 
-  useEffect(() => {
-    getStreak().then(setStreak)
-    getRecovery().then(setRecovery)
-  }, [])
-
-  useEffect(() => {
-    setLoading(true)
-    const prevM = month === 1 ? 12 : month - 1
-    const prevY = month === 1 ? year - 1 : year
-    Promise.all([
-      getMonthStats(year, month),
-      getMonthStats(prevY, prevM),
-      getMoodAvg(year, month),
-    ]).then(([s, p, mood]) => {
-      setStats(s)
-      setPrev(p)
-      setMoodAvg(mood.avg)
-      setLoading(false)
-    })
-  }, [year, month])
+  const { data, isLoading: loading } = useStatsData(year, month)
+  const stats     = data?.stats     ?? null
+  const prevStats = data?.prevStats ?? null
+  const recovery  = data?.recovery  ?? null
+  const streak    = data?.streak    ?? { streak_current: 0, streak_best: 0 }
+  const moodAvg   = data?.moodAvg   ?? null
 
   function prevMonth() { month === 1 ? (setMonth(12), setYear(y => y - 1)) : setMonth(m => m - 1) }
   function nextMonth() { month === 12 ? (setMonth(1), setYear(y => y + 1)) : setMonth(m => m + 1) }

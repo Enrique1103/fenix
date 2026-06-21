@@ -1,5 +1,10 @@
 import useSWR from "swr"
-import { getTasks, getGoals, getHabits, getMonthAll, getMonthSummary, getMonthMood, getStreak } from "./api"
+import {
+  getTasks, getGoals, getHabits,
+  getMonthAll, getMonthSummary, getMonthMood, getStreak,
+  getMonthStats, getRecovery, getMoodAvg,
+  type MonthStats, type RecoveryStats,
+} from "./api"
 import type { Task, Goal, Habit } from "./types"
 
 const opts = { revalidateOnFocus: false, dedupingInterval: 5000 }
@@ -25,6 +30,29 @@ export type HomeData = {
   prevMonthPct: number
   streakData: { streak_current: number; streak_best: number }
   moodMap: Record<string, number>
+}
+
+export type StatsData = {
+  stats: MonthStats
+  prevStats: MonthStats
+  streak: { streak_current: number; streak_best: number }
+  recovery: RecoveryStats
+  moodAvg: number | null
+}
+
+export function useStatsData(year: number, month: number) {
+  return useSWR<StatsData>(["stats", year, month], async () => {
+    const prevM = month === 1 ? 12 : month - 1
+    const prevY = month === 1 ? year - 1 : year
+    const [s, p, mood, streakRes, recoveryRes] = await Promise.all([
+      getMonthStats(year, month),
+      getMonthStats(prevY, prevM),
+      getMoodAvg(year, month),
+      getStreak(),
+      getRecovery(),
+    ])
+    return { stats: s, prevStats: p, streak: streakRes, recovery: recoveryRes, moodAvg: mood.avg }
+  }, opts)
 }
 
 export function useHomeData(year: number, month: number) {
