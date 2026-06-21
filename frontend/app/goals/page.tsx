@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react"
 import {
   Plus, Pencil, Trash2, X, Check, CalendarDays,
-  Flame, Target, Trophy, ImageIcon, List, LayoutGrid,
+  Flame, Target, Trophy, ImageIcon, LayoutGrid,
   ChevronDown, Share2, GitBranch,
 } from "lucide-react"
 import {
@@ -21,7 +21,7 @@ const GoalGraph = dynamic(() => import("@/components/goal-graph").then(m => ({ d
   loading: () => <div className="h-[520px] bg-zinc-900 rounded-2xl animate-pulse"/>,
 })
 
-type ViewMode = "list" | "cards" | "graph"
+type ViewMode = "cards" | "graph"
 type TabMode  = "active" | "achievements"
 
 function fmtDate(iso: string) {
@@ -280,10 +280,9 @@ function GoalCardItem({ goal, habits, progress, onEdit, onDelete, onComplete }: 
 
 // ── GoalItemWithProgress ──────────────────────────────────────────────────────
 
-function GoalItemWithProgress({ goal, habits, view, onEdit, onDelete, onComplete }: {
+function GoalItemWithProgress({ goal, habits, onEdit, onDelete, onComplete }: {
   goal:       Goal
   habits:     Habit[]
-  view:       "list" | "cards"
   onEdit:     () => void
   onDelete:   () => void
   onComplete: () => void
@@ -297,7 +296,7 @@ function GoalItemWithProgress({ goal, habits, view, onEdit, onDelete, onComplete
   }, [goal.id, goal.habit_ids.length])
 
   const props: GoalDisplayProps = { goal, habits, progress, onEdit, onDelete, onComplete }
-  return view === "list" ? <GoalListItem {...props}/> : <GoalCardItem {...props}/>
+  return <GoalCardItem {...props}/>
 }
 
 // ── ViewToggle ────────────────────────────────────────────────────────────────
@@ -305,11 +304,6 @@ function GoalItemWithProgress({ goal, habits, view, onEdit, onDelete, onComplete
 function ViewToggle({ view, onChange }: { view: ViewMode; onChange: (v: ViewMode) => void }) {
   return (
     <div className="flex items-center gap-1 bg-zinc-800/60 p-1 rounded-xl">
-      <button onClick={() => onChange("list")}
-        className={`p-1.5 rounded-lg transition-colors ${view === "list" ? "bg-zinc-700 text-zinc-100" : "text-zinc-500 hover:text-zinc-300"}`}
-        title="Lista">
-        <List size={14}/>
-      </button>
       <button onClick={() => onChange("cards")}
         className={`p-1.5 rounded-lg transition-colors ${view === "cards" ? "bg-zinc-700 text-zinc-100" : "text-zinc-500 hover:text-zinc-300"}`}
         title="Tarjetas">
@@ -692,7 +686,7 @@ export default function GoalsPage() {
                 <p className="text-[10px] uppercase tracking-widest text-zinc-600 px-1">Corto plazo</p>
                 {shortGoals.map(goal => (
                   <GoalItemWithProgress
-                    key={goal.id} goal={goal} habits={habits} view={view as "list" | "cards"}
+                    key={goal.id} goal={goal} habits={habits}
                     onEdit={() => { setEditing(goal); setShowModal(true) }}
                     onDelete={() => handleDelete(goal.id)}
                     onComplete={() => handleComplete(goal.id)}
@@ -706,7 +700,7 @@ export default function GoalsPage() {
                 <p className="text-[10px] uppercase tracking-widest text-zinc-600 px-1">Largo plazo</p>
                 {longGoals.map(goal => (
                   <GoalItemWithProgress
-                    key={goal.id} goal={goal} habits={habits} view={view as "list" | "cards"}
+                    key={goal.id} goal={goal} habits={habits}
                     onEdit={() => { setEditing(goal); setShowModal(true) }}
                     onDelete={() => handleDelete(goal.id)}
                     onComplete={() => handleComplete(goal.id)}
