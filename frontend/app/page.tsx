@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect, useCallback, useRef } from "react"
-import { ChevronLeft, ChevronRight, Flame, TrendingUp, TrendingDown, Plus, Pencil, Trash2, Check, X, GripVertical } from "lucide-react"
+import { ChevronLeft, ChevronRight, Flame, TrendingUp, TrendingDown, Plus, Pencil, Trash2, Check, X, GripVertical, Settings2 } from "lucide-react"
 import { setRecord, setMood, createHabit, updateHabit, deleteHabit, reorderHabits } from "@/lib/api"
 import { Habit } from "@/lib/types"
 import { useHomeData, type HomeData } from "@/lib/swr-hooks"
@@ -429,7 +429,7 @@ function HabitManagerModal({
                       className="text-zinc-500 hover:text-zinc-300 p-1 transition-colors">
                       <Pencil size={14}/>
                     </button>
-                    <button onClick={() => onDelete(h.id)}
+                    <button onClick={() => { if (confirm(`¿Eliminar "${h.name}"?`)) onDelete(h.id) }}
                       className="text-zinc-500 hover:text-red-400 p-1 transition-colors">
                       <Trash2 size={14}/>
                     </button>
@@ -704,7 +704,7 @@ export default function HabitTrackerPage() {
         onClick={() => setHabitModal(true)}
         className="fixed bottom-24 right-4 w-12 h-12 bg-green-500 hover:bg-green-400 active:scale-95 rounded-full flex items-center justify-center shadow-lg shadow-green-500/25 z-30 transition-all"
       >
-        <Plus size={20} className="text-black"/>
+        <Settings2 size={20} className="text-black"/>
       </button>
 
       {picker && (
