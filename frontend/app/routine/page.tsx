@@ -22,7 +22,8 @@ const BASE_CATEGORIES = [
   { slug: "personal", label: "Personal", color: "#fb923c" },
 ]
 
-const HOURS = Array.from({ length: 24 }, (_, i) => i) // 00:00 – 23:00
+const START_HOUR = 6
+const HOURS = Array.from({ length: 17 }, (_, i) => i + START_HOUR) // 06:00 – 22:00
 const ROW_H = 80 // px por hora
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -43,7 +44,7 @@ function minutesToTime(m: number): string {
 }
 
 function blockTopPx(startTime: string): number {
-  return timeToMinutes(startTime) / 60 * ROW_H
+  return Math.max(0, (timeToMinutes(startTime) / 60 - START_HOUR) * ROW_H)
 }
 
 function blockHeightPx(startTime: string, endTime: string): number {
@@ -53,7 +54,7 @@ function blockHeightPx(startTime: string, endTime: string): number {
 
 function nowTopPx(): number {
   const now = new Date()
-  return (now.getHours() * 60 + now.getMinutes()) / 60 * ROW_H
+  return ((now.getHours() * 60 + now.getMinutes()) / 60 - START_HOUR) * ROW_H
 }
 
 // ── ClockPicker ───────────────────────────────────────────────────────────────
@@ -585,6 +586,8 @@ export default function RoutinePage() {
     blockId: number; isDay: boolean
     startY: number; startMins: number; duration: number
   } | null>(null)
+  const nowRef      = useRef<HTMLDivElement>(null)
+  const didScrollRef = useRef(false)
 
   const dateStr = toISODate(date)
 
@@ -597,6 +600,13 @@ export default function RoutinePage() {
     const id = setInterval(() => setNowPx(nowTopPx()), 30000)
     return () => clearInterval(id)
   }, [])
+
+  useEffect(() => {
+    if (!isToday || nowPx < 0 || didScrollRef.current) return
+    didScrollRef.current = true
+    const t = setTimeout(() => nowRef.current?.scrollIntoView({ block: "center", behavior: "smooth" }), 400)
+    return () => clearTimeout(t)
+  }, [isToday, nowPx])
 
   function prevDay() { setDate(d => { const n = new Date(d); n.setDate(n.getDate() - 1); return n }) }
   function nextDay() { setDate(d => { const n = new Date(d); n.setDate(n.getDate() + 1); return n }) }
@@ -670,6 +680,8 @@ export default function RoutinePage() {
     ...(dayView?.day_blocks ?? []).map(b => ({ ...b, isDay: true as const })),
   ].sort((a, b) => a.start_time.localeCompare(b.start_time))
 
+  const completedCount = allBlocks.filter(b => b.completed).length
+  const pct = allBlocks.length > 0 ? Math.round((completedCount / allBlocks.length) * 100) : 0
   const TOTAL_H = HOURS.length * ROW_H
 
   return (
@@ -733,6 +745,26 @@ export default function RoutinePage() {
         </button>
       </div>
 
+      {/* ── Progreso del día ── */}
+      {allBlocks.length > 0 && (
+        <div className="px-4 py-3 border-b border-slate-700/20">
+          <div className="flex items-center justify-between mb-1.5">
+            <span className="text-xs text-zinc-500">
+              {completedCount} / {allBlocks.length} bloques completados
+            </span>
+            <span className={`text-xs font-bold tabular-nums ${pct === 100 ? "text-green-400" : "text-zinc-400"}`}>
+              {pct}%
+            </span>
+          </div>
+          <div className="h-1 bg-zinc-800 rounded-full overflow-hidden">
+            <div
+              className="h-full rounded-full transition-all duration-500"
+              style={{ width: `${pct}%`, background: pct === 100 ? "#22c55e" : "linear-gradient(90deg,#22c55e,#4ade80)" }}
+            />
+          </div>
+        </div>
+      )}
+
       {/* ── Timeline ── */}
       <div className="mx-4 mt-4">
         {loading ? (
@@ -746,16 +778,17 @@ export default function RoutinePage() {
             {HOURS.map((h, i) => (
               <div key={h} className="absolute left-0 right-0 flex items-start pointer-events-none"
                 style={{ top: i * ROW_H }}>
-                <span className="text-[10px] text-slate-700 w-11 text-right pr-2.5 -mt-2 flex-shrink-0">
+                <span className={`text-[10px] w-11 text-right pr-2.5 -mt-2 flex-shrink-0
+                  ${h % 2 === 0 ? "text-zinc-500" : "text-zinc-700"}`}>
                   {String(h).padStart(2, "0")}:00
                 </span>
-                <div className="flex-1 border-t border-zinc-800/70"/>
+                <div className={`flex-1 border-t ${h % 2 === 0 ? "border-zinc-800" : "border-zinc-800/40"}`}/>
               </div>
             ))}
 
             {/* Línea NOW */}
             {isToday && nowPx >= 0 && nowPx <= TOTAL_H && (
-              <div className="absolute left-11 right-0 z-20 pointer-events-none"
+              <div ref={nowRef} className="absolute left-11 right-0 z-20 pointer-events-none"
                 style={{ top: nowPx }}>
                 <div className="relative h-px bg-gradient-to-r from-red-500 via-red-500/60 to-transparent">
                   <div className="absolute -left-1.5 -top-1.5 w-3 h-3 rounded-full bg-red-500
@@ -780,9 +813,10 @@ export default function RoutinePage() {
                   className="absolute left-11 right-0 rounded-xl px-3 py-2 touch-none select-none"
                   style={{
                     top, height,
-                    background: `${block.category_color}14`,
+                    background: `linear-gradient(135deg, ${block.category_color}22 0%, ${block.category_color}0a 100%)`,
                     borderLeft: `3px solid ${block.category_color}`,
-                    opacity: done ? 0.55 : 1,
+                    boxShadow: `0 1px 6px rgba(0,0,0,0.2), inset 0 0 0 1px ${block.category_color}1a`,
+                    opacity: done ? 0.45 : 1,
                   }}
                   onPointerDown={e => onPointerDown(e, block.id, block.isDay, block.start_time, block.end_time)}
                   onPointerMove={onPointerMove}
