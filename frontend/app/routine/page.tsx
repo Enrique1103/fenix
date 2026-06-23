@@ -601,13 +601,6 @@ export default function RoutinePage() {
     return () => clearInterval(id)
   }, [])
 
-  useEffect(() => {
-    if (!isToday || nowPx < 0 || didScrollRef.current) return
-    didScrollRef.current = true
-    const t = setTimeout(() => nowRef.current?.scrollIntoView({ block: "center", behavior: "smooth" }), 400)
-    return () => clearTimeout(t)
-  }, [isToday, nowPx])
-
   function prevDay() { setDate(d => { const n = new Date(d); n.setDate(n.getDate() - 1); return n }) }
   function nextDay() { setDate(d => { const n = new Date(d); n.setDate(n.getDate() + 1); return n }) }
   function goToday() { setDate(new Date()) }
@@ -615,6 +608,13 @@ export default function RoutinePage() {
   const [mounted, setMounted] = useState(false)
   useEffect(() => setMounted(true), [])
   const isToday = mounted && toISODate(date) === toISODate(new Date())
+
+  useEffect(() => {
+    if (!isToday || nowPx < 0 || didScrollRef.current) return
+    didScrollRef.current = true
+    const t = setTimeout(() => nowRef.current?.scrollIntoView({ block: "center", behavior: "smooth" }), 400)
+    return () => clearTimeout(t)
+  }, [isToday, nowPx])
 
   // ── Drag para mover bloques ───────────────────────────────────────────────
 
