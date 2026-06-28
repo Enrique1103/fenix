@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect, useRef, useCallback } from "react"
-import { Check, Pencil, Trash2, X, Plus, Move, Undo2 } from "lucide-react"
+import { Check, Pencil, Trash2, X, Plus, Move, Undo2, Link2 } from "lucide-react"
 import { Goal } from "@/lib/types"
 import { getGoalsGraph, addGoalDep, removeGoalDep } from "@/lib/api"
 
@@ -14,24 +14,20 @@ const ROW_GAP = 120
 
 interface Pos { x: number; y: number }
 
+// Returns fully-opaque card colors matching the app's gc aesthetic
 function nodeTheme(type: "action" | "mindset", dark: boolean) {
-  if (type === "action") {
-    return {
-      bg:     dark
-        ? "linear-gradient(145deg,rgba(251,146,60,.13),rgba(234,88,12,.07))"
-        : "linear-gradient(145deg,rgba(234,88,12,.09),rgba(251,146,60,.04))",
-      border: dark ? "#f97316" : "#ea580c",
-      text:   dark ? "#fb923c" : "#c2410c",
-      glow:   "rgba(249,115,22,.30)",
-    }
+  const card  = dark ? "rgba(16,24,50,1)"     : "rgba(255,255,255,1)"
+  const cardBorder = dark ? "rgba(71,85,105,0.5)" : "rgba(148,163,184,0.45)"
+  const subtitleColor = dark ? "#475569" : "#94a3b8"
+  if (type === "action") return {
+    card, cardBorder, subtitleColor,
+    accent: dark ? "#f97316" : "#ea580c",
+    title:  dark ? "#fb923c" : "#c2410c",
   }
   return {
-    bg:     dark
-      ? "linear-gradient(145deg,rgba(139,92,246,.13),rgba(109,40,217,.07))"
-      : "linear-gradient(145deg,rgba(124,58,237,.09),rgba(139,92,246,.04))",
-    border: dark ? "#8b5cf6" : "#7c3aed",
-    text:   dark ? "#a78bfa" : "#6d28d9",
-    glow:   "rgba(139,92,246,.30)",
+    card, cardBorder, subtitleColor,
+    accent: dark ? "#8b5cf6" : "#7c3aed",
+    title:  dark ? "#a78bfa" : "#6d28d9",
   }
 }
 
@@ -39,8 +35,10 @@ function avg(xs: number[]): number {
   return xs.length === 0 ? 0 : xs.reduce((a, b) => a + b, 0) / xs.length
 }
 
+// Orthogonal V→H→V path with rounded corners
 function elbowPath(x1: number, y1: number, x2: number, y2: number): string {
-  const mid = (y1 + y2) / 2
+  // Route horizontal at 40% from source — keeps it in the gap for adjacent rows
+  const mid = y1 + (y2 - y1) * 0.4
   if (Math.abs(x1 - x2) < 0.5) return `M ${x1} ${y1} L ${x2} ${y2}`
   const r = Math.max(0, Math.min(10,
     Math.abs(x2 - x1) / 2 - 1,
@@ -91,7 +89,6 @@ function computeLayout(
   })
   const levelKeys = Object.keys(byLevel).map(Number).sort()
 
-  // Layout adjacency: above = dependents (lower level), below = prerequisites (higher level)
   const above: Record<number, number[]> = {}
   const below: Record<number, number[]> = {}
   goals.forEach(g => { above[g.id] = []; below[g.id] = [] })
@@ -141,31 +138,30 @@ export function GoalGraph({ goals, onEdit, onComplete, onDelete }: {
   onComplete: (id: number) => void
   onDelete:   (id: number) => void
 }) {
-  const [deps, setDeps]             = useState<{ goal_id: number; depends_on_goal_id: number }[]>([])
-  const [depsLoaded, setDepsLoaded] = useState(false)
-  const [positions, setPositions]   = useState<Record<number, Pos>>({})
-  const [selected, setSelected]     = useState<number | null>(null)
+  const [deps, setDeps]               = useState<{ goal_id: number; depends_on_goal_id: number }[]>([])
+  const [depsLoaded, setDepsLoaded]   = useState(false)
+  const [positions, setPositions]     = useState<Record<number, Pos>>({})
+  const [selected, setSelected]       = useState<number | null>(null)
   const [connectFrom, setConnectFrom] = useState<number | null>(null)
-  const [hoveredDep, setHoveredDep] = useState<string | null>(null)
-  const [draggingId, setDraggingId] = useState<number | null>(null)
-  const [isDark, setIsDark]         = useState(true)
-  const [undoData, setUndoData]     = useState<{ goalId: number; depId: number } | null>(null)
+  const [hoveredDep, setHoveredDep]   = useState<string | null>(null)
+  const [draggingId, setDraggingId]   = useState<number | null>(null)
+  const [isDark, setIsDark]           = useState(true)
+  const [undoData, setUndoData]       = useState<{ goalId: number; depId: number } | null>(null)
   const containerRef  = useRef<HTMLDivElement>(null)
   const dragRef       = useRef<{ id: number; ox: number; oy: number; sx: number; sy: number } | null>(null)
   const hasMoved      = useRef(false)
   const didDrag       = useRef(false)
   const undoTimerRef  = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  // Theme detection
+  // Correct theme detection: app uses data-theme="light" (default = dark)
   useEffect(() => {
-    const check = () => setIsDark(document.documentElement.classList.contains("dark"))
+    const check = () => setIsDark(document.documentElement.getAttribute("data-theme") !== "light")
     check()
     const obs = new MutationObserver(check)
-    obs.observe(document.documentElement, { attributes: true, attributeFilter: ["class"] })
+    obs.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] })
     return () => obs.disconnect()
   }, [])
 
-  // Cleanup undo timer on unmount
   useEffect(() => () => { if (undoTimerRef.current) clearTimeout(undoTimerRef.current) }, [])
 
   const loadGraph = useCallback(async () => {
@@ -245,10 +241,9 @@ export function GoalGraph({ goals, onEdit, onComplete, onDelete }: {
   async function handleDisconnect(goalId: number, depId: number) {
     await removeGoalDep(goalId, depId)
     await loadGraph()
-    // Undo toast
     if (undoTimerRef.current) clearTimeout(undoTimerRef.current)
     setUndoData({ goalId, depId })
-    undoTimerRef.current = setTimeout(() => setUndoData(null), 4500)
+    undoTimerRef.current = setTimeout(() => setUndoData(null), 5000)
   }
 
   async function handleUndo() {
@@ -259,7 +254,6 @@ export function GoalGraph({ goals, onEdit, onComplete, onDelete }: {
     setUndoData(null)
   }
 
-  // Canvas sizing
   const posVals = Object.values(positions)
   const canvasH = posVals.length > 0
     ? Math.max(400, Math.max(...posVals.map(p => p.y + NODE_H + 60)))
@@ -275,35 +269,46 @@ export function GoalGraph({ goals, onEdit, onComplete, onDelete }: {
       x2: to.x   + NODE_W / 2, y2: to.y }]
   })
 
-  // Unique junction dots
+  // Unique junction dots (connection points)
   const dotSet = new Set<string>()
   edges.forEach(({ x1, y1, x2, y2 }) => {
     dotSet.add(`${Math.round(x1)},${Math.round(y1)}`)
     dotSet.add(`${Math.round(x2)},${Math.round(y2)}`)
   })
 
-  const lineColor = isDark ? "#64748b" : "#94a3b8"
-  const dotColor  = isDark ? "#94a3b8" : "#64748b"
+  const lineColor = isDark ? "rgba(71,85,105,0.7)"  : "rgba(148,163,184,0.8)"
+  const dotColor  = isDark ? "#475569"               : "#94a3b8"
   const selectedGoal = goals.find(g => g.id === selected)
+  const connectFromGoal = goals.find(g => g.id === connectFrom)
 
   return (
     <div className="relative">
 
       {/* ── Connect-mode banner ─────────────────────────────────────────────── */}
       {connectFrom !== null && (
-        <div className="mb-3 px-4 py-2.5 rounded-xl bg-cyan-500/10 border border-cyan-500/30
-          text-xs text-cyan-400 flex items-center justify-between gap-3 animate-in fade-in duration-150">
-          <div className="space-y-0.5">
-            <p className="font-semibold text-cyan-300">
-              ⚡ Conectando desde: <span className="text-white">{goals.find(g => g.id === connectFrom)?.title}</span>
-            </p>
-            <p className="text-cyan-500/80">
-              Tocá la meta que debe completarse <span className="text-cyan-300 font-medium">antes</span> que esta
-            </p>
+        <div className="mb-3 px-4 py-3 rounded-xl flex items-center justify-between gap-3"
+          style={{
+            background: isDark ? "rgba(8,145,178,0.12)" : "rgba(6,182,212,0.08)",
+            border: `1px solid ${isDark ? "rgba(6,182,212,0.35)" : "rgba(6,182,212,0.3)"}`,
+          }}>
+          <div className="flex items-center gap-2.5">
+            <div className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0"
+              style={{ background: "rgba(6,182,212,0.2)" }}>
+              <Link2 size={13} className="text-cyan-400"/>
+            </div>
+            <div>
+              <p className="text-xs font-semibold text-cyan-300">
+                Conectando: <span style={{ color: isDark ? "#e2e8f0" : "#0f172a" }}>{connectFromGoal?.title}</span>
+              </p>
+              <p className="text-[10px] mt-0.5" style={{ color: isDark ? "#0e7490" : "#0891b2" }}>
+                Tocá la meta que debe completarse <strong>antes</strong> que esta
+              </p>
+            </div>
           </div>
           <button onClick={() => setConnectFrom(null)}
-            className="shrink-0 p-1 rounded-lg hover:bg-cyan-500/20 transition-colors">
-            <X size={13}/>
+            className="shrink-0 p-1.5 rounded-lg transition-colors"
+            style={{ color: isDark ? "#0e7490" : "#0891b2" }}>
+            <X size={14}/>
           </button>
         </div>
       )}
@@ -312,13 +317,16 @@ export function GoalGraph({ goals, onEdit, onComplete, onDelete }: {
       <div
         ref={containerRef}
         className="gc relative w-full overflow-auto"
-        style={{ height: canvasH, touchAction: "pan-x pan-y",
-          cursor: connectFrom !== null ? "crosshair" : "default" }}
+        style={{
+          height: canvasH,
+          touchAction: "pan-x pan-y",
+          cursor: connectFrom !== null ? "crosshair" : "default",
+        }}
         onPointerMove={onContainerPointerMove}
         onPointerUp={onContainerPointerUp}
         onPointerCancel={onContainerPointerUp}
       >
-        {/* SVG: edges + dots */}
+        {/* SVG layer 1: edges only (behind nodes) */}
         <svg className="absolute inset-0" style={{ width: "100%", height: "100%", pointerEvents: "none" }}>
           {edges.map(({ dep, key, x1, y1, x2, y2 }) => {
             const hovered = hoveredDep === key
@@ -328,7 +336,8 @@ export function GoalGraph({ goals, onEdit, onComplete, onDelete }: {
                 onClick={() => handleDisconnect(dep.goal_id, dep.depends_on_goal_id)}
                 onMouseEnter={() => setHoveredDep(key)}
                 onMouseLeave={() => setHoveredDep(null)}>
-                <path d={d} fill="none" stroke="transparent" strokeWidth={14}/>
+                {/* Wide invisible hit area */}
+                <path d={d} fill="none" stroke="transparent" strokeWidth={16}/>
                 <path d={d} fill="none"
                   stroke={hovered ? "#ef4444" : lineColor}
                   strokeWidth={hovered ? 2 : 1.5}
@@ -337,117 +346,107 @@ export function GoalGraph({ goals, onEdit, onComplete, onDelete }: {
               </g>
             )
           })}
-          {[...dotSet].map(pt => {
-            const [cx, cy] = pt.split(',').map(Number)
-            return <circle key={pt} cx={cx} cy={cy} r={3.5} fill={dotColor} style={{ pointerEvents: "none" }}/>
-          })}
         </svg>
 
         {/* Nodes */}
         {goals.map(goal => {
           const pos = positions[goal.id]
           if (!pos) return null
-          const { bg, border, text, glow } = nodeTheme(goal.goal_type, isDark)
-          const isSel        = selected === goal.id
-          const isDragging   = draggingId === goal.id
-          const isSource     = connectFrom === goal.id
-          const isTarget     = connectFrom !== null && connectFrom !== goal.id
+          const { card, cardBorder, subtitleColor, accent, title } = nodeTheme(goal.goal_type, isDark)
+          const isSel      = selected === goal.id
+          const isDragging = draggingId === goal.id
+          const isSource   = connectFrom === goal.id
+          const isTarget   = connectFrom !== null && connectFrom !== goal.id
 
-          let boxShadow = `0 1px 6px rgba(0,0,0,.15)`
-          if (isDragging) boxShadow = "0 12px 32px rgba(0,0,0,.40)"
-          else if (isSource) boxShadow = `0 0 0 2px rgba(6,182,212,.6), 0 0 16px rgba(6,182,212,.25)`
-          else if (isSel)    boxShadow = `0 0 0 2px rgba(34,197,94,.4), 0 0 12px rgba(34,197,94,.15)`
+          let boxShadow = isDark
+            ? "0 2px 10px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.04)"
+            : "0 2px 10px rgba(15,23,42,0.10), 0 1px 3px rgba(15,23,42,0.07)"
+          if (isDragging)    boxShadow = "0 16px 40px rgba(0,0,0,0.50)"
+          else if (isSource) boxShadow = `0 0 0 2px rgba(6,182,212,0.7), 0 0 20px rgba(6,182,212,0.25)`
+          else if (isSel)    boxShadow = `0 0 0 2px rgba(34,197,94,0.5), 0 0 16px rgba(34,197,94,0.18)`
+          else if (isTarget) boxShadow = `0 0 0 1.5px rgba(6,182,212,0.25), 0 4px 16px rgba(0,0,0,0.2)`
 
           return (
             <div
               key={goal.id}
-              className={[
-                "absolute select-none cursor-pointer rounded-xl overflow-hidden transition-all duration-150",
-                isSource ? "ring-2 ring-cyan-400 ring-offset-1" : "",
-                isTarget ? "hover:ring-2 hover:ring-cyan-400/60" : "",
-                isSource ? "animate-pulse" : "",
-              ].join(" ")}
+              className="absolute select-none cursor-pointer rounded-xl overflow-hidden transition-shadow duration-150"
               style={{
                 left: pos.x, top: pos.y,
                 width: NODE_W, height: NODE_H,
-                background: bg,
-                border: `1.5px solid ${isSource ? "#22d3ee" : isSel ? "#22c55e" : border}`,
+                background: card,
+                borderTop:    `1px solid ${isSource ? "rgba(6,182,212,0.6)" : isSel ? "rgba(34,197,94,0.5)" : cardBorder}`,
+                borderRight:  `1px solid ${isSource ? "rgba(6,182,212,0.6)" : isSel ? "rgba(34,197,94,0.5)" : cardBorder}`,
+                borderBottom: `1px solid ${isSource ? "rgba(6,182,212,0.6)" : isSel ? "rgba(34,197,94,0.5)" : cardBorder}`,
+                borderLeft:   `3px solid ${isSource ? "#22d3ee" : isSel ? "#22c55e" : accent}`,
+                borderRadius: "0.75rem",
                 boxShadow,
-                transform: isDragging ? "scale(1.05)" : "scale(1)",
+                transform: isDragging ? "scale(1.04)" : "scale(1)",
                 zIndex: isDragging ? 10 : isSource ? 5 : 1,
               }}
               onPointerDown={e => onNodePointerDown(e, goal.id)}
               onClick={() => handleNodeClick(goal.id)}
             >
-              {/* Target highlight overlay */}
-              {isTarget && (
-                <div className="absolute inset-0 rounded-xl ring-2 ring-inset ring-cyan-400/0 hover:ring-cyan-400/40 transition-all pointer-events-none"/>
-              )}
-
-              <div className="px-3 py-2 pr-14">
-                <p className="text-xs font-semibold leading-tight line-clamp-2" style={{ color: text }}>
+              <div className="px-3 py-2 pr-14 h-full flex flex-col justify-center">
+                <p className="text-xs font-semibold leading-tight line-clamp-2" style={{ color: title }}>
                   {goal.title}
                 </p>
-                <p className="text-[9px] mt-0.5" style={{ color: isDark ? "#64748b" : "#94a3b8" }}>
+                <p className="text-[9px] mt-0.5" style={{ color: subtitleColor }}>
                   {goal.goal_type === "action" ? "Acción" : "Mentalización"} · {goal.horizon === "short" ? "Corto" : "Largo"}
                 </p>
               </div>
 
               {/* Move handle */}
               <button
-                className="absolute top-0 bottom-0 right-[26px] w-6 flex items-center justify-center
-                  text-zinc-600 hover:text-zinc-300 transition-colors cursor-grab active:cursor-grabbing"
-                style={{ touchAction: "none" }}
+                className="absolute top-0 bottom-0 right-[28px] w-6 flex items-center justify-center transition-colors cursor-grab active:cursor-grabbing"
+                style={{
+                  color: isDark ? "rgba(71,85,105,0.7)" : "rgba(148,163,184,0.9)",
+                  touchAction: "none",
+                }}
                 onPointerDown={e => onMoveButtonPointerDown(e, goal.id)}
                 onClick={e => e.stopPropagation()}
               >
                 <Move size={10}/>
               </button>
 
-              <div className="absolute top-2 bottom-2 right-[23px] w-px"
-                style={{ background: isDark ? "rgba(255,255,255,.08)" : "rgba(0,0,0,.10)" }}/>
+              <div className="absolute top-2 bottom-2 right-[26px] w-px"
+                style={{ background: isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.08)" }}/>
 
-              {/* Connect button — creates a new dependency edge */}
+              {/* Connect button */}
               <button
                 title="Conectar con prerequisito"
-                className={[
-                  "absolute top-1.5 right-1.5 w-5 h-5 rounded-full flex items-center justify-center transition-all",
-                  connectFrom === goal.id
-                    ? "bg-cyan-500/30 text-cyan-300"
-                    : "bg-zinc-700/50 hover:bg-cyan-500/25 hover:text-cyan-300 text-zinc-400",
-                ].join(" ")}
+                className="absolute top-1.5 right-1.5 w-6 h-6 rounded-lg flex items-center justify-center transition-all"
+                style={{
+                  background: connectFrom === goal.id
+                    ? "rgba(6,182,212,0.3)"
+                    : isDark ? "rgba(71,85,105,0.2)" : "rgba(148,163,184,0.15)",
+                  color: connectFrom === goal.id
+                    ? "#22d3ee"
+                    : isDark ? "rgba(100,116,139,0.9)" : "rgba(148,163,184,0.9)",
+                }}
                 onPointerDown={e => e.stopPropagation()}
                 onClick={e => {
                   e.stopPropagation()
                   if (connectFrom === goal.id) { setConnectFrom(null); return }
                   setConnectFrom(goal.id); setSelected(null)
                 }}>
-                <Plus size={9}/>
+                <Plus size={10}/>
               </button>
             </div>
           )
         })}
 
-        {/* ── Undo toast (inside canvas, bottom-center) ──────────────────── */}
-        {undoData && (
-          <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-20
-            flex items-center gap-3 px-4 py-2.5 rounded-xl shadow-xl
-            text-xs font-medium
-            bg-zinc-900/95 border border-zinc-700/60 text-zinc-300
-            animate-in fade-in slide-in-from-bottom-2 duration-200"
-            style={{ backdropFilter: "blur(12px)" }}>
-            <span className="text-zinc-400">Conexión eliminada</span>
-            <button onClick={handleUndo}
-              className="flex items-center gap-1.5 text-cyan-400 hover:text-cyan-300 transition-colors font-semibold">
-              <Undo2 size={11}/> Deshacer
-            </button>
-            <div className="w-px h-3 bg-zinc-700"/>
-            <button onClick={() => { if (undoTimerRef.current) clearTimeout(undoTimerRef.current); setUndoData(null) }}
-              className="text-zinc-600 hover:text-zinc-400 transition-colors">
-              <X size={11}/>
-            </button>
-          </div>
-        )}
+        {/* SVG layer 2: dots only (after nodes in DOM = renders on top of nodes) */}
+        <svg className="absolute inset-0" style={{ width: "100%", height: "100%", pointerEvents: "none" }}>
+          {[...dotSet].map(pt => {
+            const [cx, cy] = pt.split(',').map(Number)
+            return (
+              <circle key={pt} cx={cx} cy={cy} r={3.5}
+                fill={dotColor}
+                stroke={isDark ? "rgba(16,24,50,0.8)" : "rgba(255,255,255,0.8)"}
+                strokeWidth={1.5}/>
+            )
+          })}
+        </svg>
       </div>
 
       {/* ── Selected goal detail panel ──────────────────────────────────────── */}
@@ -479,18 +478,60 @@ export function GoalGraph({ goals, onEdit, onComplete, onDelete }: {
           )}
           <div className="flex gap-2">
             <button onClick={() => { onEdit(selectedGoal); setSelected(null) }}
-              className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-zinc-800 text-xs text-zinc-400 hover:text-zinc-200">
+              className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-zinc-800 text-xs text-zinc-400 hover:text-zinc-200 transition-colors">
               <Pencil size={11}/> Editar
             </button>
             <button onClick={() => { onComplete(selectedGoal.id); setSelected(null) }}
-              className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-green-500/10 text-xs text-green-400 border border-green-500/20">
+              className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-green-500/10 text-xs text-green-400 border border-green-500/20 hover:bg-green-500/15 transition-colors">
               <Check size={11}/> Logro
             </button>
             <button onClick={() => { onDelete(selectedGoal.id); setSelected(null) }}
-              className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-red-500/10 text-xs text-red-400 border border-red-500/20">
+              className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-red-500/10 text-xs text-red-400 border border-red-500/20 hover:bg-red-500/15 transition-colors">
               <Trash2 size={11}/> Eliminar
             </button>
           </div>
+        </div>
+      )}
+
+      {/* ── Undo toast — fixed position so it's always visible ─────────────── */}
+      {undoData && (
+        <div style={{
+          position: "fixed",
+          bottom: 24,
+          left: "50%",
+          transform: "translateX(-50%)",
+          zIndex: 200,
+          display: "flex",
+          alignItems: "center",
+          gap: 12,
+          padding: "10px 16px",
+          borderRadius: 14,
+          boxShadow: "0 8px 32px rgba(0,0,0,0.5), 0 2px 8px rgba(0,0,0,0.3)",
+          background: isDark ? "rgba(16,24,50,0.97)" : "rgba(255,255,255,0.97)",
+          border: isDark ? "1px solid rgba(71,85,105,0.6)" : "1px solid rgba(148,163,184,0.5)",
+          backdropFilter: "blur(16px)",
+          WebkitBackdropFilter: "blur(16px)",
+          whiteSpace: "nowrap",
+        }}>
+          <span style={{ fontSize: 12, color: isDark ? "#94a3b8" : "#64748b" }}>
+            Conexión eliminada
+          </span>
+          <button onClick={handleUndo} style={{
+            display: "flex", alignItems: "center", gap: 5,
+            fontSize: 12, fontWeight: 600,
+            color: "#22d3ee",
+            background: "none", border: "none", cursor: "pointer", padding: 0,
+          }}>
+            <Undo2 size={12}/> Deshacer
+          </button>
+          <div style={{ width: 1, height: 14, background: isDark ? "rgba(71,85,105,0.6)" : "rgba(148,163,184,0.5)" }}/>
+          <button onClick={() => { if (undoTimerRef.current) clearTimeout(undoTimerRef.current); setUndoData(null) }}
+            style={{
+              display: "flex", background: "none", border: "none", cursor: "pointer", padding: 0,
+              color: isDark ? "#475569" : "#94a3b8",
+            }}>
+            <X size={13}/>
+          </button>
         </div>
       )}
     </div>
