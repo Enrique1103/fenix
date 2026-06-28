@@ -5,12 +5,12 @@ import { Check, Pencil, Trash2, X, Plus, Move } from "lucide-react"
 import { Goal } from "@/lib/types"
 import { getGoalsGraph, addGoalDep, removeGoalDep } from "@/lib/api"
 
-const STORAGE_KEY    = "fenix_goal_graph_positions_v3"
+const STORAGE_KEY    = "fenix_goal_graph_positions_v4"
 const DRAG_THRESHOLD = 5
 const NODE_W  = 200
 const NODE_H  = 68
 const COL_GAP = 44
-const ROW_GAP = 100
+const ROW_GAP = 120  // gap between rows — edges route in this space
 
 interface Pos { x: number; y: number }
 
@@ -20,6 +20,35 @@ function nodeColor(goal: Goal) {
     : { bg: "rgba(148,163,184,0.10)", border: "#64748b", text: "#94a3b8" }
 }
 
+function avg(xs: number[]): number {
+  return xs.length === 0 ? 0 : xs.reduce((a, b) => a + b, 0) / xs.length
+}
+
+/**
+ * Orthogonal elbow path: vertical → horizontal (at mid Y) → vertical.
+ * Rounded corners via quadratic bezier. Works for any direction.
+ */
+function elbowPath(x1: number, y1: number, x2: number, y2: number): string {
+  const mid = (y1 + y2) / 2
+  if (Math.abs(x1 - x2) < 0.5) return `M ${x1} ${y1} L ${x2} ${y2}`
+  const r = Math.max(0, Math.min(10,
+    Math.abs(x2 - x1) / 2 - 1,
+    Math.abs(mid - y1) - 2,
+    Math.abs(y2 - mid) - 2,
+  ))
+  if (r < 1) return `M ${x1} ${y1} L ${x1} ${mid} L ${x2} ${mid} L ${x2} ${y2}`
+  const sx = x2 > x1 ? 1 : -1
+  const sy = y2 > y1 ? 1 : -1
+  return [
+    `M ${x1} ${y1}`,
+    `L ${x1} ${mid - sy * r}`,
+    `Q ${x1} ${mid} ${x1 + sx * r} ${mid}`,
+    `L ${x2 - sx * r} ${mid}`,
+    `Q ${x2} ${mid} ${x2} ${mid + sy * r}`,
+    `L ${x2} ${y2}`,
+  ].join(' ')
+}
+
 function computeLayout(
   goals: Goal[],
   deps:  { goal_id: number; depends_on_goal_id: number }[],
@@ -27,40 +56,83 @@ function computeLayout(
 ): Record<number, Pos> {
   const goalIds = new Set(goals.map(g => g.id))
 
-  // Longest-path level assignment (prerequisite above, dependent below)
+  // ── Reversed level assignment ──────────────────────────────────────────────────
+  // dep.goal_id DEPENDS ON dep.depends_on_goal_id.
+  // We want the FINAL GOALS (sinks — nothing depends on them) at level 0 = TOP.
+  // Prerequisites are pushed to higher levels = lower on screen.
   const level: Record<number, number> = {}
   goals.forEach(g => { level[g.id] = 0 })
   for (let iter = 0; iter < goals.length; iter++) {
     let changed = false
     deps.forEach(dep => {
       if (!goalIds.has(dep.goal_id) || !goalIds.has(dep.depends_on_goal_id)) return
-      const needed = (level[dep.depends_on_goal_id] ?? 0) + 1
-      if (needed > (level[dep.goal_id] ?? 0)) { level[dep.goal_id] = needed; changed = true }
+      const needed = (level[dep.goal_id] ?? 0) + 1
+      if (needed > (level[dep.depends_on_goal_id] ?? 0)) {
+        level[dep.depends_on_goal_id] = needed
+        changed = true
+      }
     })
     if (!changed) break
   }
 
-  // Group by level, center each row
+  // Group by level
   const byLevel: Record<number, Goal[]> = {}
   goals.forEach(g => {
     const l = level[g.id] ?? 0
     if (!byLevel[l]) byLevel[l] = []
     byLevel[l].push(g)
   })
+  const levelKeys = Object.keys(byLevel).map(Number).sort()
 
+  // ── Layout-direction adjacency ─────────────────────────────────────────────────
+  // "above" = nodes visually above (lower level number = dependents that rely on this)
+  // "below" = nodes visually below (higher level number = prerequisites)
+  const above: Record<number, number[]> = {}
+  const below: Record<number, number[]> = {}
+  goals.forEach(g => { above[g.id] = []; below[g.id] = [] })
+  deps.forEach(dep => {
+    if (!goalIds.has(dep.goal_id) || !goalIds.has(dep.depends_on_goal_id)) return
+    above[dep.depends_on_goal_id].push(dep.goal_id)
+    below[dep.goal_id].push(dep.depends_on_goal_id)
+  })
+
+  // ── Barycenter ordering: 3 forward + backward passes ──────────────────────────
+  const col: Record<number, number> = {}
+  levelKeys.forEach(l => { byLevel[l].forEach((g, i) => { col[g.id] = i }) })
+
+  function bary(id: number, neighbors: number[]): number {
+    return neighbors.length === 0 ? (col[id] ?? 0) : avg(neighbors.map(n => col[n] ?? 0))
+  }
+
+  for (let pass = 0; pass < 3; pass++) {
+    // Forward: order each level by the mean x of nodes directly ABOVE
+    levelKeys.forEach(l => {
+      byLevel[l].sort((a, b) => bary(a.id, above[a.id]) - bary(b.id, above[b.id]))
+      byLevel[l].forEach((g, i) => { col[g.id] = i })
+    })
+    // Backward: order each level by the mean x of nodes directly BELOW
+    ;[...levelKeys].reverse().forEach(l => {
+      byLevel[l].sort((a, b) => bary(a.id, below[a.id]) - bary(b.id, below[b.id]))
+      byLevel[l].forEach((g, i) => { col[g.id] = i })
+    })
+  }
+
+  // ── Assign final x / y positions (center each row horizontally) ────────────────
   const result: Record<number, Pos> = {}
   const CANVAS_W = 1100
-  Object.keys(byLevel).map(Number).sort().forEach((l, rowIndex) => {
+
+  levelKeys.forEach((l, rowIndex) => {
     const row = byLevel[l]
     const rowW = row.length * NODE_W + (row.length - 1) * COL_GAP
     const startX = Math.max(40, (CANVAS_W - rowW) / 2)
-    row.forEach((g, col) => {
+    row.forEach((g, ci) => {
       result[g.id] = saved[g.id] ?? {
-        x: startX + col * (NODE_W + COL_GAP),
+        x: startX + ci * (NODE_W + COL_GAP),
         y: 40 + rowIndex * (NODE_H + ROW_GAP),
       }
     })
   })
+
   return result
 }
 
@@ -91,7 +163,7 @@ export function GoalGraph({ goals, onEdit, onComplete, onDelete }: {
 
   useEffect(() => { loadGraph() }, [loadGraph])
 
-  // Only set positions once deps are known to avoid flash of wrong layout
+  // Wait for deps before computing layout to avoid a flash of wrong positions
   useEffect(() => {
     if (goals.length === 0 || !depsLoaded) return
     const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? "{}")
@@ -171,10 +243,35 @@ export function GoalGraph({ goals, onEdit, onComplete, onDelete }: {
     await loadGraph()
   }
 
-  const posVals     = Object.values(positions)
-  const canvasH     = posVals.length > 0
+  // Dynamic canvas height
+  const posVals = Object.values(positions)
+  const canvasH = posVals.length > 0
     ? Math.max(400, Math.max(...posVals.map(p => p.y + NODE_H + 60)))
     : 400
+
+  // Pre-compute all edge geometries
+  const edges = deps.flatMap(dep => {
+    // Arrow: goal_id (top, dependent) → depends_on_goal_id (bottom, prerequisite)
+    const from = positions[dep.goal_id]
+    const to   = positions[dep.depends_on_goal_id]
+    if (!from || !to) return []
+    return [{
+      dep,
+      key: `${dep.goal_id}-${dep.depends_on_goal_id}`,
+      x1: from.x + NODE_W / 2,
+      y1: from.y + NODE_H,       // bottom-center of dependent (top node)
+      x2: to.x   + NODE_W / 2,
+      y2: to.y,                  // top-center of prerequisite (bottom node)
+    }]
+  })
+
+  // Unique junction dots (circuit convention: dot = real connection)
+  const dotSet = new Set<string>()
+  edges.forEach(({ x1, y1, x2, y2 }) => {
+    dotSet.add(`${Math.round(x1)},${Math.round(y1)}`)
+    dotSet.add(`${Math.round(x2)},${Math.round(y2)}`)
+  })
+
   const selectedGoal = goals.find(g => g.id === selected)
 
   return (
@@ -186,8 +283,7 @@ export function GoalGraph({ goals, onEdit, onComplete, onDelete }: {
               Origen: <span className="text-white">{goals.find(g => g.id === connectFrom)?.title}</span>
             </p>
             <p className="text-cyan-500/80">
-              Hacé clic en la meta que es <span className="text-cyan-300 font-medium">prerequisito</span> de
-              esta — la flecha irá de esa meta hacia la tuya
+              Hacé clic en la meta que es <span className="text-cyan-300 font-medium">prerequisito</span> de esta
             </p>
           </div>
           <button onClick={() => setConnectFrom(null)} className="shrink-0"><X size={13}/></button>
@@ -197,54 +293,46 @@ export function GoalGraph({ goals, onEdit, onComplete, onDelete }: {
       <div
         ref={containerRef}
         className="gc relative w-full overflow-auto"
-        style={{ height: canvasH, minWidth: 0, touchAction: "pan-x pan-y" }}
+        style={{ height: canvasH, touchAction: "pan-x pan-y" }}
         onPointerMove={onContainerPointerMove}
         onPointerUp={onContainerPointerUp}
         onPointerCancel={onContainerPointerUp}
       >
-        {/* SVG arrows — bezier curves for clean top-to-bottom flow */}
-        <svg className="absolute inset-0" style={{ width: "100%", height: "100%", pointerEvents: "none" }}>
-          <defs>
-            <marker id="arrow" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
-              <path d="M0,0 L0,6 L8,3 z" fill="#475569"/>
-            </marker>
-            <marker id="arrow-red" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
-              <path d="M0,0 L0,6 L8,3 z" fill="#ef4444"/>
-            </marker>
-          </defs>
-          {deps.map(dep => {
-            const from = positions[dep.depends_on_goal_id]
-            const to   = positions[dep.goal_id]
-            if (!from || !to) return null
-            const x1 = from.x + NODE_W / 2
-            const y1 = from.y + NODE_H
-            const x2 = to.x   + NODE_W / 2
-            const y2 = to.y
-            const cy = (y1 + y2) / 2
-            const key = `${dep.goal_id}-${dep.depends_on_goal_id}`
+        {/* SVG layer: edges + junction dots */}
+        <svg
+          className="absolute inset-0"
+          style={{ width: "100%", height: "100%", pointerEvents: "none" }}
+        >
+          {/* Edges */}
+          {edges.map(({ dep, key, x1, y1, x2, y2 }) => {
             const hovered = hoveredDep === key
+            const stroke  = hovered ? "#ef4444" : "#475569"
+            const d       = elbowPath(x1, y1, x2, y2)
             return (
               <g key={key} style={{ pointerEvents: "all", cursor: "pointer" }}
                 onClick={() => handleDisconnect(dep.goal_id, dep.depends_on_goal_id)}
                 onMouseEnter={() => setHoveredDep(key)}
                 onMouseLeave={() => setHoveredDep(null)}>
                 {/* Wide transparent hit area */}
-                <path d={`M ${x1} ${y1} C ${x1} ${cy}, ${x2} ${cy}, ${x2} ${y2}`}
-                  fill="none" stroke="transparent" strokeWidth={16}/>
-                {/* Visible bezier curve */}
-                <path d={`M ${x1} ${y1} C ${x1} ${cy}, ${x2} ${cy}, ${x2} ${y2}`}
-                  fill="none"
-                  stroke={hovered ? "#ef4444" : "#475569"}
-                  strokeWidth={hovered ? 2 : 1.5}
-                  strokeDasharray="5 4"
-                  markerEnd={hovered ? "url(#arrow-red)" : "url(#arrow)"}
-                  style={{ pointerEvents: "none" }}/>
+                <path d={d} fill="none" stroke="transparent" strokeWidth={14}/>
+                {/* Visible orthogonal line */}
+                <path d={d} fill="none" stroke={stroke} strokeWidth={1.5}
+                  strokeDasharray="5 4" style={{ pointerEvents: "none" }}/>
               </g>
+            )
+          })}
+
+          {/* Junction dots — circuit convention: dot = real connection, no dot = crossing only */}
+          {[...dotSet].map(pt => {
+            const [cx, cy] = pt.split(',').map(Number)
+            return (
+              <circle key={pt} cx={cx} cy={cy} r={3.5}
+                fill="#475569" style={{ pointerEvents: "none" }}/>
             )
           })}
         </svg>
 
-        {/* Nodes */}
+        {/* Nodes — rendered after SVG so they appear on top of lines */}
         {goals.map(goal => {
           const pos = positions[goal.id]
           if (!pos) return null
@@ -303,7 +391,7 @@ export function GoalGraph({ goals, onEdit, onComplete, onDelete }: {
         })}
       </div>
 
-      {/* Selected goal panel */}
+      {/* Selected goal detail panel */}
       {selectedGoal && (
         <div className="mt-3 gc p-4 space-y-3">
           <div className="flex items-start justify-between gap-2">
