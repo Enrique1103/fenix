@@ -269,15 +269,16 @@ export function GoalGraph({ goals, onEdit, onComplete, onDelete }: {
       x2: to.x   + NODE_W / 2, y2: to.y }]
   })
 
-  // Unique junction dots (connection points)
-  const dotSet = new Set<string>()
+  // Count edges per connection point — true junctions have count >= 2
+  const dotCount = new Map<string, number>()
   edges.forEach(({ x1, y1, x2, y2 }) => {
-    dotSet.add(`${Math.round(x1)},${Math.round(y1)}`)
-    dotSet.add(`${Math.round(x2)},${Math.round(y2)}`)
+    const k1 = `${Math.round(x1)},${Math.round(y1)}`
+    const k2 = `${Math.round(x2)},${Math.round(y2)}`
+    dotCount.set(k1, (dotCount.get(k1) ?? 0) + 1)
+    dotCount.set(k2, (dotCount.get(k2) ?? 0) + 1)
   })
 
   const lineColor = isDark ? "rgba(71,85,105,0.7)"  : "rgba(148,163,184,0.8)"
-  const dotColor  = isDark ? "#475569"               : "#94a3b8"
   const selectedGoal = goals.find(g => g.id === selected)
   const connectFromGoal = goals.find(g => g.id === connectFrom)
 
@@ -435,15 +436,39 @@ export function GoalGraph({ goals, onEdit, onComplete, onDelete }: {
           )
         })}
 
-        {/* SVG layer 2: dots only (after nodes in DOM = renders on top of nodes) */}
+        {/* SVG layer 2: junction dots (after nodes in DOM = renders on top) */}
         <svg className="absolute inset-0" style={{ width: "100%", height: "100%", pointerEvents: "none" }}>
-          {[...dotSet].map(pt => {
+          <defs>
+            {/* Glow filter for true junction dots (PCB-style) */}
+            <filter id="pcb-glow" x="-100%" y="-100%" width="300%" height="300%">
+              <feGaussianBlur stdDeviation="3" result="blur"/>
+              <feMerge>
+                <feMergeNode in="blur"/>
+                <feMergeNode in="SourceGraphic"/>
+              </feMerge>
+            </filter>
+          </defs>
+          {[...dotCount.entries()].map(([pt, count]) => {
             const [cx, cy] = pt.split(',').map(Number)
-            return (
-              <circle key={pt} cx={cx} cy={cy} r={3.5}
-                fill={dotColor}
+            const isJunction = count >= 2
+            // True junction (≥2 lines meet): large, bright, glowing — PCB look
+            // Single endpoint: small and subtle
+            return isJunction ? (
+              <g key={pt} filter="url(#pcb-glow)">
+                {/* Outer halo ring */}
+                <circle cx={cx} cy={cy} r={8}
+                  fill={isDark ? "rgba(34,211,238,0.15)" : "rgba(14,116,144,0.12)"}/>
+                {/* Main junction dot */}
+                <circle cx={cx} cy={cy} r={5}
+                  fill={isDark ? "#22d3ee" : "#0e7490"}
+                  stroke={isDark ? "rgba(16,24,50,0.9)" : "rgba(255,255,255,0.9)"}
+                  strokeWidth={1.5}/>
+              </g>
+            ) : (
+              <circle key={pt} cx={cx} cy={cy} r={3}
+                fill={isDark ? "#475569" : "#94a3b8"}
                 stroke={isDark ? "rgba(16,24,50,0.8)" : "rgba(255,255,255,0.8)"}
-                strokeWidth={1.5}/>
+                strokeWidth={1}/>
             )
           })}
         </svg>
