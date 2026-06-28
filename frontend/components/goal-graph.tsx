@@ -35,9 +35,48 @@ function avg(xs: number[]): number {
   return xs.length === 0 ? 0 : xs.reduce((a, b) => a + b, 0) / xs.length
 }
 
-// Orthogonal V→H→V path with rounded corners
-function elbowPath(x1: number, y1: number, x2: number, y2: number): string {
-  // Route horizontal at 40% from source — keeps it in the gap for adjacent rows
+// Pick the best pair of ports (which side of each card) based on relative position
+function bestPorts(sPos: Pos, tPos: Pos): {
+  x1: number; y1: number; x2: number; y2: number; horiz: boolean
+} {
+  const scx = sPos.x + NODE_W / 2, scy = sPos.y + NODE_H / 2
+  const tcx = tPos.x + NODE_W / 2, tcy = tPos.y + NODE_H / 2
+  const dx = tcx - scx, dy = tcy - scy
+  if (Math.abs(dx) > Math.abs(dy)) {
+    // Left ↔ Right ports
+    return dx > 0
+      ? { x1: sPos.x + NODE_W, y1: scy, x2: tPos.x,         y2: tcy, horiz: true }
+      : { x1: sPos.x,          y1: scy, x2: tPos.x + NODE_W, y2: tcy, horiz: true }
+  }
+  // Top ↔ Bottom ports
+  return dy > 0
+    ? { x1: scx, y1: sPos.y + NODE_H, x2: tcx, y2: tPos.y,         horiz: false }
+    : { x1: scx, y1: sPos.y,          x2: tcx, y2: tPos.y + NODE_H, horiz: false }
+}
+
+// Orthogonal routing: V-H-V for vertical connections, H-V-H for horizontal
+function elbowPath(x1: number, y1: number, x2: number, y2: number, horiz: boolean): string {
+  if (horiz) {
+    // H-V-H: horizontal stub → vertical middle → horizontal stub
+    const mid = (x1 + x2) / 2
+    if (Math.abs(y1 - y2) < 0.5) return `M ${x1} ${y1} L ${x2} ${y2}`
+    const r = Math.max(0, Math.min(10,
+      Math.abs(mid - x1) - 2,
+      Math.abs(x2 - mid) - 2,
+      Math.abs(y2 - y1) / 2 - 2,
+    ))
+    if (r < 1) return `M ${x1} ${y1} L ${mid} ${y1} L ${mid} ${y2} L ${x2} ${y2}`
+    const sx = x2 > x1 ? 1 : -1, sy = y2 > y1 ? 1 : -1
+    return [
+      `M ${x1} ${y1}`,
+      `L ${mid - sx * r} ${y1}`,
+      `Q ${mid} ${y1} ${mid} ${y1 + sy * r}`,
+      `L ${mid} ${y2 - sy * r}`,
+      `Q ${mid} ${y2} ${mid + sx * r} ${y2}`,
+      `L ${x2} ${y2}`,
+    ].join(' ')
+  }
+  // V-H-V: vertical stub → horizontal middle → vertical stub
   const mid = y1 + (y2 - y1) * 0.4
   if (Math.abs(x1 - x2) < 0.5) return `M ${x1} ${y1} L ${x2} ${y2}`
   const r = Math.max(0, Math.min(10,
@@ -46,8 +85,7 @@ function elbowPath(x1: number, y1: number, x2: number, y2: number): string {
     Math.abs(y2 - mid) - 2,
   ))
   if (r < 1) return `M ${x1} ${y1} L ${x1} ${mid} L ${x2} ${mid} L ${x2} ${y2}`
-  const sx = x2 > x1 ? 1 : -1
-  const sy = y2 > y1 ? 1 : -1
+  const sx = x2 > x1 ? 1 : -1, sy = y2 > y1 ? 1 : -1
   return [
     `M ${x1} ${y1}`,
     `L ${x1} ${mid - sy * r}`,
@@ -259,14 +297,13 @@ export function GoalGraph({ goals, onEdit, onComplete, onDelete }: {
     ? Math.max(400, Math.max(...posVals.map(p => p.y + NODE_H + 60)))
     : 400
 
-  // Edge geometries — arrow flows from goal (top) down to prerequisite (below)
+  // Edge geometries — pick best port pair based on relative position
   const edges = deps.flatMap(dep => {
     const from = positions[dep.goal_id]
     const to   = positions[dep.depends_on_goal_id]
     if (!from || !to) return []
-    return [{ dep, key: `${dep.goal_id}-${dep.depends_on_goal_id}`,
-      x1: from.x + NODE_W / 2, y1: from.y + NODE_H,
-      x2: to.x   + NODE_W / 2, y2: to.y }]
+    const { x1, y1, x2, y2, horiz } = bestPorts(from, to)
+    return [{ dep, key: `${dep.goal_id}-${dep.depends_on_goal_id}`, x1, y1, x2, y2, horiz }]
   })
 
   // Count edges per connection point — true junctions have count >= 2
@@ -329,9 +366,9 @@ export function GoalGraph({ goals, onEdit, onComplete, onDelete }: {
       >
         {/* SVG layer 1: edges only (behind nodes) */}
         <svg className="absolute inset-0" style={{ width: "100%", height: "100%", pointerEvents: "none" }}>
-          {edges.map(({ dep, key, x1, y1, x2, y2 }) => {
+          {edges.map(({ dep, key, x1, y1, x2, y2, horiz }) => {
             const hovered = hoveredDep === key
-            const d       = elbowPath(x1, y1, x2, y2)
+            const d       = elbowPath(x1, y1, x2, y2, horiz)
             return (
               <g key={key} style={{ pointerEvents: "all", cursor: "pointer" }}
                 onClick={() => handleDisconnect(dep.goal_id, dep.depends_on_goal_id)}
