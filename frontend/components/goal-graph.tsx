@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect, useRef, useCallback } from "react"
-import { Check, Pencil, Trash2, X, Plus, Move } from "lucide-react"
+import { Check, Pencil, Trash2, X, Plus, Move, Undo2 } from "lucide-react"
 import { Goal } from "@/lib/types"
 import { getGoalsGraph, addGoalDep, removeGoalDep } from "@/lib/api"
 
@@ -10,24 +10,35 @@ const DRAG_THRESHOLD = 5
 const NODE_W  = 200
 const NODE_H  = 68
 const COL_GAP = 44
-const ROW_GAP = 120  // gap between rows — edges route in this space
+const ROW_GAP = 120
 
 interface Pos { x: number; y: number }
 
-function nodeColor(goal: Goal) {
-  return goal.goal_type === "action"
-    ? { bg: "rgba(251,146,60,0.12)", border: "#f97316", text: "#fb923c" }
-    : { bg: "rgba(148,163,184,0.10)", border: "#64748b", text: "#94a3b8" }
+function nodeTheme(type: "action" | "mindset", dark: boolean) {
+  if (type === "action") {
+    return {
+      bg:     dark
+        ? "linear-gradient(145deg,rgba(251,146,60,.13),rgba(234,88,12,.07))"
+        : "linear-gradient(145deg,rgba(234,88,12,.09),rgba(251,146,60,.04))",
+      border: dark ? "#f97316" : "#ea580c",
+      text:   dark ? "#fb923c" : "#c2410c",
+      glow:   "rgba(249,115,22,.30)",
+    }
+  }
+  return {
+    bg:     dark
+      ? "linear-gradient(145deg,rgba(139,92,246,.13),rgba(109,40,217,.07))"
+      : "linear-gradient(145deg,rgba(124,58,237,.09),rgba(139,92,246,.04))",
+    border: dark ? "#8b5cf6" : "#7c3aed",
+    text:   dark ? "#a78bfa" : "#6d28d9",
+    glow:   "rgba(139,92,246,.30)",
+  }
 }
 
 function avg(xs: number[]): number {
   return xs.length === 0 ? 0 : xs.reduce((a, b) => a + b, 0) / xs.length
 }
 
-/**
- * Orthogonal elbow path: vertical → horizontal (at mid Y) → vertical.
- * Rounded corners via quadratic bezier. Works for any direction.
- */
 function elbowPath(x1: number, y1: number, x2: number, y2: number): string {
   const mid = (y1 + y2) / 2
   if (Math.abs(x1 - x2) < 0.5) return `M ${x1} ${y1} L ${x2} ${y2}`
@@ -56,10 +67,7 @@ function computeLayout(
 ): Record<number, Pos> {
   const goalIds = new Set(goals.map(g => g.id))
 
-  // ── Reversed level assignment ──────────────────────────────────────────────────
-  // dep.goal_id DEPENDS ON dep.depends_on_goal_id.
-  // We want the FINAL GOALS (sinks — nothing depends on them) at level 0 = TOP.
-  // Prerequisites are pushed to higher levels = lower on screen.
+  // Final goals (sinks) at level 0 = TOP; prerequisites cascade downward
   const level: Record<number, number> = {}
   goals.forEach(g => { level[g.id] = 0 })
   for (let iter = 0; iter < goals.length; iter++) {
@@ -75,7 +83,6 @@ function computeLayout(
     if (!changed) break
   }
 
-  // Group by level
   const byLevel: Record<number, Goal[]> = {}
   goals.forEach(g => {
     const l = level[g.id] ?? 0
@@ -84,9 +91,7 @@ function computeLayout(
   })
   const levelKeys = Object.keys(byLevel).map(Number).sort()
 
-  // ── Layout-direction adjacency ─────────────────────────────────────────────────
-  // "above" = nodes visually above (lower level number = dependents that rely on this)
-  // "below" = nodes visually below (higher level number = prerequisites)
+  // Layout adjacency: above = dependents (lower level), below = prerequisites (higher level)
   const above: Record<number, number[]> = {}
   const below: Record<number, number[]> = {}
   goals.forEach(g => { above[g.id] = []; below[g.id] = [] })
@@ -96,43 +101,37 @@ function computeLayout(
     below[dep.goal_id].push(dep.depends_on_goal_id)
   })
 
-  // ── Barycenter ordering: 3 forward + backward passes ──────────────────────────
+  // Barycenter ordering — 3 forward + backward passes
   const col: Record<number, number> = {}
   levelKeys.forEach(l => { byLevel[l].forEach((g, i) => { col[g.id] = i }) })
 
-  function bary(id: number, neighbors: number[]): number {
-    return neighbors.length === 0 ? (col[id] ?? 0) : avg(neighbors.map(n => col[n] ?? 0))
+  function bary(id: number, ns: number[]): number {
+    return ns.length === 0 ? (col[id] ?? 0) : avg(ns.map(n => col[n] ?? 0))
   }
-
   for (let pass = 0; pass < 3; pass++) {
-    // Forward: order each level by the mean x of nodes directly ABOVE
     levelKeys.forEach(l => {
       byLevel[l].sort((a, b) => bary(a.id, above[a.id]) - bary(b.id, above[b.id]))
       byLevel[l].forEach((g, i) => { col[g.id] = i })
     })
-    // Backward: order each level by the mean x of nodes directly BELOW
     ;[...levelKeys].reverse().forEach(l => {
       byLevel[l].sort((a, b) => bary(a.id, below[a.id]) - bary(b.id, below[b.id]))
       byLevel[l].forEach((g, i) => { col[g.id] = i })
     })
   }
 
-  // ── Assign final x / y positions (center each row horizontally) ────────────────
   const result: Record<number, Pos> = {}
   const CANVAS_W = 1100
-
   levelKeys.forEach((l, rowIndex) => {
-    const row = byLevel[l]
+    const row  = byLevel[l]
     const rowW = row.length * NODE_W + (row.length - 1) * COL_GAP
-    const startX = Math.max(40, (CANVAS_W - rowW) / 2)
+    const sx   = Math.max(40, (CANVAS_W - rowW) / 2)
     row.forEach((g, ci) => {
       result[g.id] = saved[g.id] ?? {
-        x: startX + ci * (NODE_W + COL_GAP),
+        x: sx + ci * (NODE_W + COL_GAP),
         y: 40 + rowIndex * (NODE_H + ROW_GAP),
       }
     })
   })
-
   return result
 }
 
@@ -149,10 +148,25 @@ export function GoalGraph({ goals, onEdit, onComplete, onDelete }: {
   const [connectFrom, setConnectFrom] = useState<number | null>(null)
   const [hoveredDep, setHoveredDep] = useState<string | null>(null)
   const [draggingId, setDraggingId] = useState<number | null>(null)
-  const containerRef = useRef<HTMLDivElement>(null)
-  const dragRef      = useRef<{ id: number; ox: number; oy: number; sx: number; sy: number } | null>(null)
-  const hasMoved     = useRef(false)
-  const didDrag      = useRef(false)
+  const [isDark, setIsDark]         = useState(true)
+  const [undoData, setUndoData]     = useState<{ goalId: number; depId: number } | null>(null)
+  const containerRef  = useRef<HTMLDivElement>(null)
+  const dragRef       = useRef<{ id: number; ox: number; oy: number; sx: number; sy: number } | null>(null)
+  const hasMoved      = useRef(false)
+  const didDrag       = useRef(false)
+  const undoTimerRef  = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  // Theme detection
+  useEffect(() => {
+    const check = () => setIsDark(document.documentElement.classList.contains("dark"))
+    check()
+    const obs = new MutationObserver(check)
+    obs.observe(document.documentElement, { attributes: true, attributeFilter: ["class"] })
+    return () => obs.disconnect()
+  }, [])
+
+  // Cleanup undo timer on unmount
+  useEffect(() => () => { if (undoTimerRef.current) clearTimeout(undoTimerRef.current) }, [])
 
   const loadGraph = useCallback(async () => {
     try {
@@ -163,7 +177,6 @@ export function GoalGraph({ goals, onEdit, onComplete, onDelete }: {
 
   useEffect(() => { loadGraph() }, [loadGraph])
 
-  // Wait for deps before computing layout to avoid a flash of wrong positions
   useEffect(() => {
     if (goals.length === 0 || !depsLoaded) return
     const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? "{}")
@@ -187,8 +200,7 @@ export function GoalGraph({ goals, onEdit, onComplete, onDelete }: {
   }
 
   function onMoveButtonPointerDown(e: React.PointerEvent<HTMLButtonElement>, id: number) {
-    e.stopPropagation()
-    e.preventDefault()
+    e.stopPropagation(); e.preventDefault()
     if (connectFrom !== null) return
     containerRef.current?.setPointerCapture(e.pointerId)
     beginDrag(id, e.clientX, e.clientY)
@@ -203,9 +215,7 @@ export function GoalGraph({ goals, onEdit, onComplete, onDelete }: {
       hasMoved.current = true
       try { containerRef.current?.setPointerCapture(e.pointerId) } catch {}
     }
-    if (hasMoved.current) {
-      setPositions(prev => ({ ...prev, [d.id]: { x: d.ox + dx, y: d.oy + dy } }))
-    }
+    if (hasMoved.current) setPositions(prev => ({ ...prev, [d.id]: { x: d.ox + dx, y: d.oy + dy } }))
   }
 
   function onContainerPointerUp(e: React.PointerEvent<HTMLDivElement>) {
@@ -214,24 +224,18 @@ export function GoalGraph({ goals, onEdit, onComplete, onDelete }: {
     const moved = hasMoved.current
     try { containerRef.current?.releasePointerCapture(e.pointerId) } catch {}
     if (moved) {
-      const dx = e.clientX - d.sx
-      const dy = e.clientY - d.sy
+      const dx = e.clientX - d.sx, dy = e.clientY - d.sy
       savePositions({ ...positions, [d.id]: { x: d.ox + dx, y: d.oy + dy } })
       didDrag.current = true
       setTimeout(() => { didDrag.current = false }, 50)
     }
-    dragRef.current  = null
-    hasMoved.current = false
-    setDraggingId(null)
+    dragRef.current = null; hasMoved.current = false; setDraggingId(null)
   }
 
   async function handleNodeClick(id: number) {
     if (didDrag.current) return
     if (connectFrom !== null) {
-      if (connectFrom !== id) {
-        await addGoalDep(id, connectFrom)
-        await loadGraph()
-      }
+      if (connectFrom !== id) { await addGoalDep(id, connectFrom); await loadGraph() }
       setConnectFrom(null)
       return
     }
@@ -241,135 +245,158 @@ export function GoalGraph({ goals, onEdit, onComplete, onDelete }: {
   async function handleDisconnect(goalId: number, depId: number) {
     await removeGoalDep(goalId, depId)
     await loadGraph()
+    // Undo toast
+    if (undoTimerRef.current) clearTimeout(undoTimerRef.current)
+    setUndoData({ goalId, depId })
+    undoTimerRef.current = setTimeout(() => setUndoData(null), 4500)
   }
 
-  // Dynamic canvas height
+  async function handleUndo() {
+    if (!undoData) return
+    if (undoTimerRef.current) clearTimeout(undoTimerRef.current)
+    await addGoalDep(undoData.goalId, undoData.depId)
+    await loadGraph()
+    setUndoData(null)
+  }
+
+  // Canvas sizing
   const posVals = Object.values(positions)
   const canvasH = posVals.length > 0
     ? Math.max(400, Math.max(...posVals.map(p => p.y + NODE_H + 60)))
     : 400
 
-  // Pre-compute all edge geometries
+  // Edge geometries — arrow flows from goal (top) down to prerequisite (below)
   const edges = deps.flatMap(dep => {
-    // Arrow: goal_id (top, dependent) → depends_on_goal_id (bottom, prerequisite)
     const from = positions[dep.goal_id]
     const to   = positions[dep.depends_on_goal_id]
     if (!from || !to) return []
-    return [{
-      dep,
-      key: `${dep.goal_id}-${dep.depends_on_goal_id}`,
-      x1: from.x + NODE_W / 2,
-      y1: from.y + NODE_H,       // bottom-center of dependent (top node)
-      x2: to.x   + NODE_W / 2,
-      y2: to.y,                  // top-center of prerequisite (bottom node)
-    }]
+    return [{ dep, key: `${dep.goal_id}-${dep.depends_on_goal_id}`,
+      x1: from.x + NODE_W / 2, y1: from.y + NODE_H,
+      x2: to.x   + NODE_W / 2, y2: to.y }]
   })
 
-  // Unique junction dots (circuit convention: dot = real connection)
+  // Unique junction dots
   const dotSet = new Set<string>()
   edges.forEach(({ x1, y1, x2, y2 }) => {
     dotSet.add(`${Math.round(x1)},${Math.round(y1)}`)
     dotSet.add(`${Math.round(x2)},${Math.round(y2)}`)
   })
 
+  const lineColor = isDark ? "#64748b" : "#94a3b8"
+  const dotColor  = isDark ? "#94a3b8" : "#64748b"
   const selectedGoal = goals.find(g => g.id === selected)
 
   return (
     <div className="relative">
+
+      {/* ── Connect-mode banner ─────────────────────────────────────────────── */}
       {connectFrom !== null && (
-        <div className="mb-3 px-3 py-2 rounded-xl bg-cyan-500/10 border border-cyan-500/25 text-xs text-cyan-400 flex items-center justify-between gap-3">
+        <div className="mb-3 px-4 py-2.5 rounded-xl bg-cyan-500/10 border border-cyan-500/30
+          text-xs text-cyan-400 flex items-center justify-between gap-3 animate-in fade-in duration-150">
           <div className="space-y-0.5">
-            <p className="font-medium">
-              Origen: <span className="text-white">{goals.find(g => g.id === connectFrom)?.title}</span>
+            <p className="font-semibold text-cyan-300">
+              ⚡ Conectando desde: <span className="text-white">{goals.find(g => g.id === connectFrom)?.title}</span>
             </p>
             <p className="text-cyan-500/80">
-              Hacé clic en la meta que es <span className="text-cyan-300 font-medium">prerequisito</span> de esta
+              Tocá la meta que debe completarse <span className="text-cyan-300 font-medium">antes</span> que esta
             </p>
           </div>
-          <button onClick={() => setConnectFrom(null)} className="shrink-0"><X size={13}/></button>
+          <button onClick={() => setConnectFrom(null)}
+            className="shrink-0 p-1 rounded-lg hover:bg-cyan-500/20 transition-colors">
+            <X size={13}/>
+          </button>
         </div>
       )}
 
+      {/* ── Graph canvas ────────────────────────────────────────────────────── */}
       <div
         ref={containerRef}
         className="gc relative w-full overflow-auto"
-        style={{ height: canvasH, touchAction: "pan-x pan-y" }}
+        style={{ height: canvasH, touchAction: "pan-x pan-y",
+          cursor: connectFrom !== null ? "crosshair" : "default" }}
         onPointerMove={onContainerPointerMove}
         onPointerUp={onContainerPointerUp}
         onPointerCancel={onContainerPointerUp}
       >
-        {/* SVG layer: edges + junction dots */}
-        <svg
-          className="absolute inset-0"
-          style={{ width: "100%", height: "100%", pointerEvents: "none" }}
-        >
-          {/* Edges */}
+        {/* SVG: edges + dots */}
+        <svg className="absolute inset-0" style={{ width: "100%", height: "100%", pointerEvents: "none" }}>
           {edges.map(({ dep, key, x1, y1, x2, y2 }) => {
             const hovered = hoveredDep === key
-            const stroke  = hovered ? "#ef4444" : "#475569"
             const d       = elbowPath(x1, y1, x2, y2)
             return (
               <g key={key} style={{ pointerEvents: "all", cursor: "pointer" }}
                 onClick={() => handleDisconnect(dep.goal_id, dep.depends_on_goal_id)}
                 onMouseEnter={() => setHoveredDep(key)}
                 onMouseLeave={() => setHoveredDep(null)}>
-                {/* Wide transparent hit area */}
                 <path d={d} fill="none" stroke="transparent" strokeWidth={14}/>
-                {/* Visible orthogonal line */}
-                <path d={d} fill="none" stroke={stroke} strokeWidth={1.5}
-                  strokeDasharray="5 4" style={{ pointerEvents: "none" }}/>
+                <path d={d} fill="none"
+                  stroke={hovered ? "#ef4444" : lineColor}
+                  strokeWidth={hovered ? 2 : 1.5}
+                  strokeDasharray="5 4"
+                  style={{ pointerEvents: "none" }}/>
               </g>
             )
           })}
-
-          {/* Junction dots — circuit convention: dot = real connection, no dot = crossing only */}
           {[...dotSet].map(pt => {
             const [cx, cy] = pt.split(',').map(Number)
-            return (
-              <circle key={pt} cx={cx} cy={cy} r={3.5}
-                fill="#475569" style={{ pointerEvents: "none" }}/>
-            )
+            return <circle key={pt} cx={cx} cy={cy} r={3.5} fill={dotColor} style={{ pointerEvents: "none" }}/>
           })}
         </svg>
 
-        {/* Nodes — rendered after SVG so they appear on top of lines */}
+        {/* Nodes */}
         {goals.map(goal => {
           const pos = positions[goal.id]
           if (!pos) return null
-          const { bg, border, text } = nodeColor(goal)
-          const isSel      = selected === goal.id
-          const isDragging = draggingId === goal.id
+          const { bg, border, text, glow } = nodeTheme(goal.goal_type, isDark)
+          const isSel        = selected === goal.id
+          const isDragging   = draggingId === goal.id
+          const isSource     = connectFrom === goal.id
+          const isTarget     = connectFrom !== null && connectFrom !== goal.id
+
+          let boxShadow = `0 1px 6px rgba(0,0,0,.15)`
+          if (isDragging) boxShadow = "0 12px 32px rgba(0,0,0,.40)"
+          else if (isSource) boxShadow = `0 0 0 2px rgba(6,182,212,.6), 0 0 16px rgba(6,182,212,.25)`
+          else if (isSel)    boxShadow = `0 0 0 2px rgba(34,197,94,.4), 0 0 12px rgba(34,197,94,.15)`
+
           return (
             <div
               key={goal.id}
-              className="absolute select-none cursor-pointer rounded-xl overflow-hidden"
+              className={[
+                "absolute select-none cursor-pointer rounded-xl overflow-hidden transition-all duration-150",
+                isSource ? "ring-2 ring-cyan-400 ring-offset-1" : "",
+                isTarget ? "hover:ring-2 hover:ring-cyan-400/60" : "",
+                isSource ? "animate-pulse" : "",
+              ].join(" ")}
               style={{
                 left: pos.x, top: pos.y,
                 width: NODE_W, height: NODE_H,
                 background: bg,
-                border: `1.5px solid ${isSel ? "#22c55e" : border}`,
-                boxShadow: isDragging
-                  ? "0 10px 28px rgba(0,0,0,0.4)"
-                  : isSel ? "0 0 0 2px rgba(34,197,94,0.2)" : "none",
-                transform: isDragging ? "scale(1.06)" : "scale(1)",
-                transition: "transform 0.12s ease, box-shadow 0.12s ease",
-                zIndex: isDragging ? 10 : 1,
+                border: `1.5px solid ${isSource ? "#22d3ee" : isSel ? "#22c55e" : border}`,
+                boxShadow,
+                transform: isDragging ? "scale(1.05)" : "scale(1)",
+                zIndex: isDragging ? 10 : isSource ? 5 : 1,
               }}
               onPointerDown={e => onNodePointerDown(e, goal.id)}
               onClick={() => handleNodeClick(goal.id)}
             >
+              {/* Target highlight overlay */}
+              {isTarget && (
+                <div className="absolute inset-0 rounded-xl ring-2 ring-inset ring-cyan-400/0 hover:ring-cyan-400/40 transition-all pointer-events-none"/>
+              )}
+
               <div className="px-3 py-2 pr-14">
                 <p className="text-xs font-semibold leading-tight line-clamp-2" style={{ color: text }}>
                   {goal.title}
                 </p>
-                <p className="text-[9px] text-zinc-500 mt-0.5">
+                <p className="text-[9px] mt-0.5" style={{ color: isDark ? "#64748b" : "#94a3b8" }}>
                   {goal.goal_type === "action" ? "Acción" : "Mentalización"} · {goal.horizon === "short" ? "Corto" : "Largo"}
                 </p>
               </div>
 
               {/* Move handle */}
               <button
-                className="absolute top-0 bottom-0 right-[26px] w-6 flex items-center justify-center text-zinc-600 hover:text-zinc-300 transition-colors cursor-grab active:cursor-grabbing"
+                className="absolute top-0 bottom-0 right-[26px] w-6 flex items-center justify-center
+                  text-zinc-600 hover:text-zinc-300 transition-colors cursor-grab active:cursor-grabbing"
                 style={{ touchAction: "none" }}
                 onPointerDown={e => onMoveButtonPointerDown(e, goal.id)}
                 onClick={e => e.stopPropagation()}
@@ -377,21 +404,53 @@ export function GoalGraph({ goals, onEdit, onComplete, onDelete }: {
                 <Move size={10}/>
               </button>
 
-              <div className="absolute top-2 bottom-2 right-[23px] w-px bg-zinc-700/50"/>
+              <div className="absolute top-2 bottom-2 right-[23px] w-px"
+                style={{ background: isDark ? "rgba(255,255,255,.08)" : "rgba(0,0,0,.10)" }}/>
 
-              {/* Connect button */}
+              {/* Connect button — creates a new dependency edge */}
               <button
-                className="absolute top-1.5 right-1.5 w-4 h-4 rounded-full bg-zinc-700/60 flex items-center justify-center hover:bg-cyan-500/20 transition-colors"
+                title="Conectar con prerequisito"
+                className={[
+                  "absolute top-1.5 right-1.5 w-5 h-5 rounded-full flex items-center justify-center transition-all",
+                  connectFrom === goal.id
+                    ? "bg-cyan-500/30 text-cyan-300"
+                    : "bg-zinc-700/50 hover:bg-cyan-500/25 hover:text-cyan-300 text-zinc-400",
+                ].join(" ")}
                 onPointerDown={e => e.stopPropagation()}
-                onClick={e => { e.stopPropagation(); setConnectFrom(goal.id); setSelected(null) }}>
-                <Plus size={8} className="text-zinc-400"/>
+                onClick={e => {
+                  e.stopPropagation()
+                  if (connectFrom === goal.id) { setConnectFrom(null); return }
+                  setConnectFrom(goal.id); setSelected(null)
+                }}>
+                <Plus size={9}/>
               </button>
             </div>
           )
         })}
+
+        {/* ── Undo toast (inside canvas, bottom-center) ──────────────────── */}
+        {undoData && (
+          <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-20
+            flex items-center gap-3 px-4 py-2.5 rounded-xl shadow-xl
+            text-xs font-medium
+            bg-zinc-900/95 border border-zinc-700/60 text-zinc-300
+            animate-in fade-in slide-in-from-bottom-2 duration-200"
+            style={{ backdropFilter: "blur(12px)" }}>
+            <span className="text-zinc-400">Conexión eliminada</span>
+            <button onClick={handleUndo}
+              className="flex items-center gap-1.5 text-cyan-400 hover:text-cyan-300 transition-colors font-semibold">
+              <Undo2 size={11}/> Deshacer
+            </button>
+            <div className="w-px h-3 bg-zinc-700"/>
+            <button onClick={() => { if (undoTimerRef.current) clearTimeout(undoTimerRef.current); setUndoData(null) }}
+              className="text-zinc-600 hover:text-zinc-400 transition-colors">
+              <X size={11}/>
+            </button>
+          </div>
+        )}
       </div>
 
-      {/* Selected goal detail panel */}
+      {/* ── Selected goal detail panel ──────────────────────────────────────── */}
       {selectedGoal && (
         <div className="mt-3 gc p-4 space-y-3">
           <div className="flex items-start justify-between gap-2">
@@ -400,7 +459,6 @@ export function GoalGraph({ goals, onEdit, onComplete, onDelete }: {
               <X size={14}/>
             </button>
           </div>
-
           {deps.filter(d => d.goal_id === selected).length > 0 && (
             <div>
               <p className="text-[10px] text-zinc-600 mb-1.5">Depende de:</p>
@@ -412,16 +470,13 @@ export function GoalGraph({ goals, onEdit, onComplete, onDelete }: {
                       className="flex items-center justify-between px-2.5 py-1.5 rounded-lg bg-zinc-800/60 text-xs text-zinc-400">
                       <span>{depGoal.title}</span>
                       <button onClick={() => handleDisconnect(selected!, dep.depends_on_goal_id)}
-                        className="text-zinc-600 hover:text-red-400 transition-colors">
-                        <X size={11}/>
-                      </button>
+                        className="text-zinc-600 hover:text-red-400 transition-colors"><X size={11}/></button>
                     </div>
                   ) : null
                 })}
               </div>
             </div>
           )}
-
           <div className="flex gap-2">
             <button onClick={() => { onEdit(selectedGoal); setSelected(null) }}
               className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-zinc-800 text-xs text-zinc-400 hover:text-zinc-200">
