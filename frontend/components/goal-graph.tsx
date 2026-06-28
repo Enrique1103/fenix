@@ -5,8 +5,12 @@ import { Check, Pencil, Trash2, X, Plus, Move } from "lucide-react"
 import { Goal } from "@/lib/types"
 import { getGoalsGraph, addGoalDep, removeGoalDep } from "@/lib/api"
 
-const STORAGE_KEY    = "fenix_goal_graph_positions_v2"
+const STORAGE_KEY    = "fenix_goal_graph_positions_v3"
 const DRAG_THRESHOLD = 5
+const NODE_W  = 200
+const NODE_H  = 68
+const COL_GAP = 44
+const ROW_GAP = 100
 
 interface Pos { x: number; y: number }
 
@@ -16,15 +20,60 @@ function nodeColor(goal: Goal) {
     : { bg: "rgba(148,163,184,0.10)", border: "#64748b", text: "#94a3b8" }
 }
 
+function computeLayout(
+  goals: Goal[],
+  deps:  { goal_id: number; depends_on_goal_id: number }[],
+  saved: Record<number, Pos>
+): Record<number, Pos> {
+  const goalIds = new Set(goals.map(g => g.id))
+
+  // Longest-path level assignment (prerequisite above, dependent below)
+  const level: Record<number, number> = {}
+  goals.forEach(g => { level[g.id] = 0 })
+  for (let iter = 0; iter < goals.length; iter++) {
+    let changed = false
+    deps.forEach(dep => {
+      if (!goalIds.has(dep.goal_id) || !goalIds.has(dep.depends_on_goal_id)) return
+      const needed = (level[dep.depends_on_goal_id] ?? 0) + 1
+      if (needed > (level[dep.goal_id] ?? 0)) { level[dep.goal_id] = needed; changed = true }
+    })
+    if (!changed) break
+  }
+
+  // Group by level, center each row
+  const byLevel: Record<number, Goal[]> = {}
+  goals.forEach(g => {
+    const l = level[g.id] ?? 0
+    if (!byLevel[l]) byLevel[l] = []
+    byLevel[l].push(g)
+  })
+
+  const result: Record<number, Pos> = {}
+  const CANVAS_W = 1100
+  Object.keys(byLevel).map(Number).sort().forEach((l, rowIndex) => {
+    const row = byLevel[l]
+    const rowW = row.length * NODE_W + (row.length - 1) * COL_GAP
+    const startX = Math.max(40, (CANVAS_W - rowW) / 2)
+    row.forEach((g, col) => {
+      result[g.id] = saved[g.id] ?? {
+        x: startX + col * (NODE_W + COL_GAP),
+        y: 40 + rowIndex * (NODE_H + ROW_GAP),
+      }
+    })
+  })
+  return result
+}
+
 export function GoalGraph({ goals, onEdit, onComplete, onDelete }: {
   goals:      Goal[]
   onEdit:     (g: Goal) => void
   onComplete: (id: number) => void
   onDelete:   (id: number) => void
 }) {
-  const [deps, setDeps]         = useState<{ goal_id: number; depends_on_goal_id: number }[]>([])
-  const [positions, setPositions] = useState<Record<number, Pos>>({})
-  const [selected, setSelected]  = useState<number | null>(null)
+  const [deps, setDeps]             = useState<{ goal_id: number; depends_on_goal_id: number }[]>([])
+  const [depsLoaded, setDepsLoaded] = useState(false)
+  const [positions, setPositions]   = useState<Record<number, Pos>>({})
+  const [selected, setSelected]     = useState<number | null>(null)
   const [connectFrom, setConnectFrom] = useState<number | null>(null)
   const [hoveredDep, setHoveredDep] = useState<string | null>(null)
   const [draggingId, setDraggingId] = useState<number | null>(null)
@@ -37,23 +86,17 @@ export function GoalGraph({ goals, onEdit, onComplete, onDelete }: {
     try {
       const data = await getGoalsGraph()
       setDeps(data.deps)
-    } catch { /* ignore */ }
+    } catch { /* ignore */ } finally { setDepsLoaded(true) }
   }, [])
 
-  useEffect(() => {
-    loadGraph()
-  }, [loadGraph])
+  useEffect(() => { loadGraph() }, [loadGraph])
 
-  // Initialize / restore positions
+  // Only set positions once deps are known to avoid flash of wrong layout
   useEffect(() => {
-    if (goals.length === 0) return
+    if (goals.length === 0 || !depsLoaded) return
     const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? "{}")
-    const next: Record<number, Pos> = {}
-    goals.forEach((g, i) => {
-      next[g.id] = saved[g.id] ?? { x: 40 + (i % 4) * 240, y: 40 + Math.floor(i / 4) * 160 }
-    })
-    setPositions(next)
-  }, [goals])
+    setPositions(computeLayout(goals, deps, saved))
+  }, [goals, deps, depsLoaded])
 
   function savePositions(pos: Record<number, Pos>) {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(pos))
@@ -66,14 +109,11 @@ export function GoalGraph({ goals, onEdit, onComplete, onDelete }: {
     setDraggingId(id)
   }
 
-  // Mouse drag from anywhere on the node body
   function onNodePointerDown(e: React.PointerEvent<HTMLDivElement>, id: number) {
     if (e.pointerType !== "mouse" || connectFrom !== null) return
     beginDrag(id, e.clientX, e.clientY)
-    // Capture will happen in onContainerPointerMove once threshold crossed
   }
 
-  // Explicit move button — works for all pointer types (touch + mouse)
   function onMoveButtonPointerDown(e: React.PointerEvent<HTMLButtonElement>, id: number) {
     e.stopPropagation()
     e.preventDefault()
@@ -89,7 +129,6 @@ export function GoalGraph({ goals, onEdit, onComplete, onDelete }: {
     const dy = e.clientY - d.sy
     if (!hasMoved.current && (Math.abs(dx) > DRAG_THRESHOLD || Math.abs(dy) > DRAG_THRESHOLD)) {
       hasMoved.current = true
-      // Lazy capture for mouse drags from node body
       try { containerRef.current?.setPointerCapture(e.pointerId) } catch {}
     }
     if (hasMoved.current) {
@@ -132,9 +171,10 @@ export function GoalGraph({ goals, onEdit, onComplete, onDelete }: {
     await loadGraph()
   }
 
-  const NODE_W = 200
-  const NODE_H = 68
-
+  const posVals     = Object.values(positions)
+  const canvasH     = posVals.length > 0
+    ? Math.max(400, Math.max(...posVals.map(p => p.y + NODE_H + 60)))
+    : 400
   const selectedGoal = goals.find(g => g.id === selected)
 
   return (
@@ -146,8 +186,8 @@ export function GoalGraph({ goals, onEdit, onComplete, onDelete }: {
               Origen: <span className="text-white">{goals.find(g => g.id === connectFrom)?.title}</span>
             </p>
             <p className="text-cyan-500/80">
-              Ahora hacé clic en la meta que es <span className="text-cyan-300 font-medium">prerequisito</span> de esta
-              — la flecha irá de esa meta hacia la tuya
+              Hacé clic en la meta que es <span className="text-cyan-300 font-medium">prerequisito</span> de
+              esta — la flecha irá de esa meta hacia la tuya
             </p>
           </div>
           <button onClick={() => setConnectFrom(null)} className="shrink-0"><X size={13}/></button>
@@ -157,12 +197,12 @@ export function GoalGraph({ goals, onEdit, onComplete, onDelete }: {
       <div
         ref={containerRef}
         className="gc relative w-full overflow-auto"
-        style={{ height: 520, touchAction: "pan-x pan-y" }}
+        style={{ height: canvasH, minWidth: 0, touchAction: "pan-x pan-y" }}
         onPointerMove={onContainerPointerMove}
         onPointerUp={onContainerPointerUp}
         onPointerCancel={onContainerPointerUp}
       >
-        {/* SVG arrows */}
+        {/* SVG arrows — bezier curves for clean top-to-bottom flow */}
         <svg className="absolute inset-0" style={{ width: "100%", height: "100%", pointerEvents: "none" }}>
           <defs>
             <marker id="arrow" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
@@ -178,8 +218,9 @@ export function GoalGraph({ goals, onEdit, onComplete, onDelete }: {
             if (!from || !to) return null
             const x1 = from.x + NODE_W / 2
             const y1 = from.y + NODE_H
-            const x2 = to.x + NODE_W / 2
+            const x2 = to.x   + NODE_W / 2
             const y2 = to.y
+            const cy = (y1 + y2) / 2
             const key = `${dep.goal_id}-${dep.depends_on_goal_id}`
             const hovered = hoveredDep === key
             return (
@@ -187,14 +228,16 @@ export function GoalGraph({ goals, onEdit, onComplete, onDelete }: {
                 onClick={() => handleDisconnect(dep.goal_id, dep.depends_on_goal_id)}
                 onMouseEnter={() => setHoveredDep(key)}
                 onMouseLeave={() => setHoveredDep(null)}>
-                {/* Hit area — línea ancha invisible para facilitar el click */}
-                <line x1={x1} y1={y1} x2={x2} y2={y2} stroke="transparent" strokeWidth={16}/>
-                {/* Línea visible */}
-                <line x1={x1} y1={y1} x2={x2} y2={y2}
+                {/* Wide transparent hit area */}
+                <path d={`M ${x1} ${y1} C ${x1} ${cy}, ${x2} ${cy}, ${x2} ${y2}`}
+                  fill="none" stroke="transparent" strokeWidth={16}/>
+                {/* Visible bezier curve */}
+                <path d={`M ${x1} ${y1} C ${x1} ${cy}, ${x2} ${cy}, ${x2} ${y2}`}
+                  fill="none"
                   stroke={hovered ? "#ef4444" : "#475569"}
                   strokeWidth={hovered ? 2 : 1.5}
+                  strokeDasharray="5 4"
                   markerEnd={hovered ? "url(#arrow-red)" : "url(#arrow)"}
-                  strokeDasharray="4 3"
                   style={{ pointerEvents: "none" }}/>
               </g>
             )
@@ -227,17 +270,16 @@ export function GoalGraph({ goals, onEdit, onComplete, onDelete }: {
               onPointerDown={e => onNodePointerDown(e, goal.id)}
               onClick={() => handleNodeClick(goal.id)}
             >
-              {/* Content */}
               <div className="px-3 py-2 pr-14">
                 <p className="text-xs font-semibold leading-tight line-clamp-2" style={{ color: text }}>
                   {goal.title}
                 </p>
-                <p className="text-[9px] text-zinc-600 mt-0.5">
+                <p className="text-[9px] text-zinc-500 mt-0.5">
                   {goal.goal_type === "action" ? "Acción" : "Mentalización"} · {goal.horizon === "short" ? "Corto" : "Largo"}
                 </p>
               </div>
 
-              {/* Move button */}
+              {/* Move handle */}
               <button
                 className="absolute top-0 bottom-0 right-[26px] w-6 flex items-center justify-center text-zinc-600 hover:text-zinc-300 transition-colors cursor-grab active:cursor-grabbing"
                 style={{ touchAction: "none" }}
@@ -247,7 +289,6 @@ export function GoalGraph({ goals, onEdit, onComplete, onDelete }: {
                 <Move size={10}/>
               </button>
 
-              {/* Separator */}
               <div className="absolute top-2 bottom-2 right-[23px] w-px bg-zinc-700/50"/>
 
               {/* Connect button */}
@@ -262,7 +303,7 @@ export function GoalGraph({ goals, onEdit, onComplete, onDelete }: {
         })}
       </div>
 
-      {/* Selected panel */}
+      {/* Selected goal panel */}
       {selectedGoal && (
         <div className="mt-3 gc p-4 space-y-3">
           <div className="flex items-start justify-between gap-2">
@@ -272,7 +313,6 @@ export function GoalGraph({ goals, onEdit, onComplete, onDelete }: {
             </button>
           </div>
 
-          {/* Dependencies from this node */}
           {deps.filter(d => d.goal_id === selected).length > 0 && (
             <div>
               <p className="text-[10px] text-zinc-600 mb-1.5">Depende de:</p>
@@ -280,8 +320,8 @@ export function GoalGraph({ goals, onEdit, onComplete, onDelete }: {
                 {deps.filter(d => d.goal_id === selected).map(dep => {
                   const depGoal = goals.find(g => g.id === dep.depends_on_goal_id)
                   return depGoal ? (
-                    <div key={dep.depends_on_goal_id} className="flex items-center justify-between
-                      px-2.5 py-1.5 rounded-lg bg-zinc-800/60 text-xs text-zinc-400">
+                    <div key={dep.depends_on_goal_id}
+                      className="flex items-center justify-between px-2.5 py-1.5 rounded-lg bg-zinc-800/60 text-xs text-zinc-400">
                       <span>{depGoal.title}</span>
                       <button onClick={() => handleDisconnect(selected!, dep.depends_on_goal_id)}
                         className="text-zinc-600 hover:text-red-400 transition-colors">
