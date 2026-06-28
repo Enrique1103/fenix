@@ -211,6 +211,23 @@ select option { background-color: #0f172a; color: #e2e8f0; }
 [data-theme="light"] .text-amber-200\/80 { color: rgba(120, 80, 0, 0.85) !important; }
 [data-theme="light"] .text-amber-500\/55 { color: rgba(146, 90, 0, 0.75) !important; }
 
+/* ── Routine card ── */
+:root {
+  --card-bg:   #0f172a;
+  --card-text: #e2e8f0;
+}
+[data-theme="light"] {
+  --card-bg:   #f8fafc;
+  --card-text: #0f172a;
+}
+
+/* ── Footprint blink ── */
+@keyframes footBlink {
+  0%, 100% { opacity: 1; transform: scale(1.15); }
+  50%       { opacity: 0.4; transform: scale(0.95); }
+}
+.foot-now { animation: footBlink 1.3s ease-in-out infinite; }
+
 /* ── Clock face ── */
 .clock-face { fill: rgba(18, 18, 22, 0.97); }
 [data-theme="light"] .clock-face { fill: rgba(30, 41, 59, 0.92); }

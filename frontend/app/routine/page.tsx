@@ -1,7 +1,8 @@
 "use client"
 
 import { useEffect, useState, useRef } from "react"
-import { ChevronLeft, ChevronRight, Plus, Check, ChevronDown, Pencil, Trash2, X } from "lucide-react"
+import { ChevronLeft, ChevronRight, Plus, Check, ChevronDown, Pencil, Trash2, X, ArrowRight } from "lucide-react"
+import { Footprint } from "@/components/footprint"
 import {
   setDayOverride,
   createTemplate, deleteTemplate,
@@ -23,8 +24,13 @@ const BASE_CATEGORIES = [
 ]
 
 const START_HOUR = 6
-const HOURS = Array.from({ length: 17 }, (_, i) => i + START_HOUR) // 06:00 – 22:00
-const ROW_H = 80 // px por hora
+const PM_START   = 12
+const HOURS      = Array.from({ length: 17 }, (_, i) => i + START_HOUR) // 06:00 – 22:00
+const AM_HOURS   = HOURS.slice(0, PM_START - START_HOUR)  // 06 – 11 (6 items)
+const PM_HOURS   = HOURS.slice(PM_START - START_HOUR)     // 12 – 22 (11 items)
+const ROW_H      = 80 // px por hora
+const AM_TOTAL_H = AM_HOURS.length * ROW_H
+const PM_TOTAL_H = PM_HOURS.length * ROW_H
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -43,8 +49,8 @@ function minutesToTime(m: number): string {
   return `${String(h).padStart(2, "0")}:${String(min).padStart(2, "0")}`
 }
 
-function blockTopPx(startTime: string): number {
-  return Math.max(0, (timeToMinutes(startTime) / 60 - START_HOUR) * ROW_H)
+function blockTopPx(startTime: string, columnStart = START_HOUR): number {
+  return Math.max(0, (timeToMinutes(startTime) / 60 - columnStart) * ROW_H)
 }
 
 function blockHeightPx(startTime: string, endTime: string): number {
@@ -581,10 +587,11 @@ export default function RoutinePage() {
 
   const [tmplModal, setTmplModal]     = useState(false)
   const [newTmplName, setNewTmplName] = useState("")
+  const [isDesktop, setIsDesktop]     = useState(false)
 
   const dragRef = useRef<{
     blockId: number; isDay: boolean
-    startY: number; startMins: number; duration: number
+    startY: number; startMins: number; duration: number; columnStart: number
   } | null>(null)
   const nowRef      = useRef<HTMLDivElement>(null)
   const didScrollRef = useRef(false)
@@ -610,6 +617,13 @@ export default function RoutinePage() {
   const isToday = mounted && toISODate(date) === toISODate(new Date())
 
   useEffect(() => {
+    const check = () => setIsDesktop(window.innerWidth >= 1024)
+    check()
+    window.addEventListener("resize", check)
+    return () => window.removeEventListener("resize", check)
+  }, [])
+
+  useEffect(() => {
     if (!isToday || nowPx < 0 || didScrollRef.current) return
     didScrollRef.current = true
     const t = setTimeout(() => nowRef.current?.scrollIntoView({ block: "center", behavior: "smooth" }), 400)
@@ -618,13 +632,14 @@ export default function RoutinePage() {
 
   // ── Drag para mover bloques ───────────────────────────────────────────────
 
-  function onPointerDown(e: React.PointerEvent<HTMLDivElement>, blockId: number, isDay: boolean, startTime: string, endTime: string) {
+  function onPointerDown(e: React.PointerEvent<HTMLDivElement>, blockId: number, isDay: boolean, startTime: string, endTime: string, columnStart = START_HOUR) {
     e.currentTarget.setPointerCapture(e.pointerId)
     dragRef.current = {
       blockId, isDay,
       startY: e.clientY,
       startMins: timeToMinutes(startTime),
       duration: timeToMinutes(endTime) - timeToMinutes(startTime),
+      columnStart,
     }
   }
 
@@ -635,7 +650,7 @@ export default function RoutinePage() {
     const deltaMins = Math.round((dy / ROW_H) * 60 / 15) * 15
     const newStart = Math.max(0, Math.min(24 * 60 - d.duration, d.startMins + deltaMins))
     const el = document.getElementById(`block-${d.isDay ? "d" : "t"}-${d.blockId}`)
-    if (el) el.style.top = `${blockTopPx(minutesToTime(newStart))}px`
+    if (el) el.style.top = `${blockTopPx(minutesToTime(newStart), d.columnStart)}px`
   }
 
   async function onPointerUp(e: React.PointerEvent<HTMLDivElement>) {
@@ -683,6 +698,183 @@ export default function RoutinePage() {
   const completedCount = allBlocks.filter(b => b.completed).length
   const pct = allBlocks.length > 0 ? Math.round((completedCount / allBlocks.length) * 100) : 0
   const TOTAL_H = HOURS.length * ROW_H
+
+  const amBlocks = allBlocks.filter(b => timeToMinutes(b.start_time) < PM_START * 60)
+  const pmBlocks = allBlocks.filter(b => timeToMinutes(b.start_time) >= PM_START * 60)
+
+  const nowMinutes    = new Date().getHours() * 60 + new Date().getMinutes()
+  const nowBlockIdx   = isToday
+    ? allBlocks.findIndex(b => timeToMinutes(b.start_time) <= nowMinutes && timeToMinutes(b.end_time) > nowMinutes)
+    : -1
+  const nowBlock      = nowBlockIdx >= 0 ? allBlocks[nowBlockIdx] : null
+  const trailBlocks   = nowBlockIdx > 0
+    ? allBlocks.slice(Math.max(0, nowBlockIdx - 3), nowBlockIdx).reverse()
+    : []
+
+  // nowPx is relative to START_HOUR=6; PM column needs offset
+  const nowPxPM = nowPx - (PM_START - START_HOUR) * ROW_H
+
+  function renderColumn(
+    columnBlocks: typeof allBlocks,
+    colStart: number,
+    colHours: number[],
+    colTotalH: number,
+    showNow: boolean,
+    colNowPx: number,
+    attachScrollRef: boolean,
+  ) {
+    const colTrail = trailBlocks.filter(b =>
+      columnBlocks.some(cb => cb.id === b.id && cb.isDay === b.isDay)
+    )
+    const colNowBlock = nowBlock && columnBlocks.some(cb => cb.id === nowBlock.id && cb.isDay === nowBlock.isDay)
+      ? nowBlock : null
+
+    return (
+      <div className="relative" style={{ height: colTotalH }}>
+
+        {/* Scroll anchor */}
+        {showNow && colNowPx >= 0 && colNowPx <= colTotalH && (
+          <div ref={attachScrollRef ? nowRef : undefined}
+            className="absolute pointer-events-none"
+            style={{ top: colNowPx, left: 0, height: 1, width: 1 }}/>
+        )}
+
+        {/* Hour lines */}
+        {colHours.map((h, i) => (
+          <div key={h} className="absolute left-0 right-0 flex items-start pointer-events-none"
+            style={{ top: i * ROW_H }}>
+            <span className={`text-[10px] w-11 text-right pr-2.5 -mt-2 flex-shrink-0
+              ${h % 2 === 0 ? "text-zinc-500" : "text-zinc-700"}`}>
+              {String(h).padStart(2, "0")}:00
+            </span>
+            <div className={`flex-1 border-t ${h % 2 === 0 ? "border-zinc-800" : "border-zinc-800/40"}`}/>
+          </div>
+        ))}
+
+        {/* Trail footprints */}
+        {colTrail.map((b, idx) => {
+          const top = blockTopPx(b.start_time, colStart)
+          const h   = blockHeightPx(b.start_time, b.end_time)
+          return (
+            <div key={`trail-${b.isDay ? "d" : "t"}-${b.id}`}
+              className="absolute pointer-events-none z-10"
+              style={{
+                top: top + h / 2 - 6,
+                left: idx % 2 === 0 ? 8 : 20,
+                transform: `rotate(${idx % 2 === 0 ? 15 : -10}deg)`,
+                opacity: Math.max(0.15, 0.4 - idx * 0.1),
+              }}>
+              <Footprint size={12} color="#94a3b8"/>
+            </div>
+          )
+        })}
+
+        {/* Now footprint — on current block */}
+        {colNowBlock && (
+          <div className="absolute pointer-events-none z-20 foot-now"
+            style={{
+              top: blockTopPx(colNowBlock.start_time, colStart)
+                + blockHeightPx(colNowBlock.start_time, colNowBlock.end_time) / 2 - 10,
+              left: 10,
+            }}>
+            <Footprint size={20} color="#ef4444"/>
+          </div>
+        )}
+
+        {/* Floating now footprint — between blocks */}
+        {showNow && colNowPx >= 0 && colNowPx <= colTotalH && !colNowBlock && (
+          <div className="absolute left-0 right-0 z-20 pointer-events-none flex items-center"
+            style={{ top: colNowPx }}>
+            <div className="foot-now pl-1.5">
+              <Footprint size={18} color="#ef4444"/>
+            </div>
+            <div className="flex-1 h-px bg-gradient-to-r from-red-500/40 to-transparent"/>
+            <span className="text-[10px] font-bold text-red-400 bg-zinc-950/90 px-1.5 py-0.5 rounded border border-red-500/30 mr-1">
+              {new Date().toLocaleTimeString("es-UY", { hour: "2-digit", minute: "2-digit" })}
+            </span>
+          </div>
+        )}
+
+        {/* Blocks */}
+        {columnBlocks.map(block => {
+          const top    = blockTopPx(block.start_time, colStart)
+          const height = blockHeightPx(block.start_time, block.end_time)
+          const done   = block.completed ?? false
+          return (
+            <div
+              key={`${block.isDay ? "d" : "t"}-${block.id}`}
+              id={`block-${block.isDay ? "d" : "t"}-${block.id}`}
+              className="absolute left-11 right-0 rounded-lg px-2.5 py-2 touch-none select-none border-l-[3px]"
+              style={{
+                top, height,
+                borderColor: block.category_color,
+                background: "var(--card-bg)",
+                opacity: done ? 0.45 : 1,
+              }}
+              onPointerDown={e => onPointerDown(e, block.id, block.isDay, block.start_time, block.end_time, colStart)}
+              onPointerMove={onPointerMove}
+              onPointerUp={onPointerUp}
+            >
+              <div className="flex items-start justify-between gap-2 h-full">
+                <div className="flex-1 min-w-0">
+                  <p className={`text-xs leading-tight truncate ${done ? "line-through text-zinc-500" : "font-medium"}`}
+                    style={done ? undefined : { color: "var(--card-text)" }}>
+                    {block.title}
+                  </p>
+                  {height > 44 && (
+                    <p className="text-[10px] text-zinc-500 mt-0.5">
+                      {block.start_time} – {block.end_time}
+                    </p>
+                  )}
+                  {height > 60 && (
+                    <div className="flex gap-1.5 mt-1.5 flex-wrap">
+                      <span className="text-[9px] px-1.5 py-0.5 rounded-lg"
+                        style={{ background: `${block.category_color}26`, color: block.category_color }}>
+                        {block.category_label}
+                      </span>
+                      {block.habit_id && (
+                        <span className="text-[9px] px-1.5 py-0.5 rounded-lg bg-cyan-500/15 text-cyan-400">
+                          ↔ hábito
+                        </span>
+                      )}
+                      {!block.isDay && (block as RoutineBlock & { task?: { id: number; title: string; completed: boolean } | null }).task && (
+                        <span className="text-[9px] px-1.5 py-0.5 rounded-lg
+                          bg-violet-500/10 text-violet-400 border border-violet-500/20 max-w-[120px] truncate inline-block">
+                          ✓ {(block as RoutineBlock & { task?: { id: number; title: string; completed: boolean } | null }).task!.title}
+                        </span>
+                      )}
+                    </div>
+                  )}
+                </div>
+                <div className="flex items-center gap-1.5 flex-shrink-0 mt-0.5">
+                  <button
+                    onPointerDown={e => e.stopPropagation()}
+                    onClick={() => setModal({ open: true, mode: "edit", isDay: block.isDay, block })}
+                    className="w-5 h-5 rounded-full border border-slate-600 flex items-center justify-center
+                      hover:border-zinc-400 transition-all">
+                    <Pencil size={9} className="text-zinc-500"/>
+                  </button>
+                  <button
+                    onPointerDown={e => e.stopPropagation()}
+                    onClick={() => handleComplete(block.id, block.isDay, done, block.habit_id)}
+                    className={`w-5 h-5 rounded-full border flex items-center justify-center transition-all
+                      ${done ? "bg-green-500 border-green-500" : "border-slate-600 hover:border-green-500"}`}>
+                    {done && <Check size={9} className="text-white"/>}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )
+        })}
+
+        {columnBlocks.length === 0 && (
+          <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+            <p className="text-sm text-zinc-700">Sin bloques</p>
+          </div>
+        )}
+      </div>
+    )
+  }
 
   return (
     <div className="min-h-screen bg-zinc-950 pb-28">
@@ -771,116 +963,25 @@ export default function RoutinePage() {
           <div className="space-y-2">
             {[1, 2, 3, 4].map(i => <div key={i} className="h-20 bg-zinc-900 rounded-xl animate-pulse"/>)}
           </div>
-        ) : (
-          <div className="relative" style={{ height: TOTAL_H }}>
-
-            {/* Líneas y etiquetas de hora */}
-            {HOURS.map((h, i) => (
-              <div key={h} className="absolute left-0 right-0 flex items-start pointer-events-none"
-                style={{ top: i * ROW_H }}>
-                <span className={`text-[10px] w-11 text-right pr-2.5 -mt-2 flex-shrink-0
-                  ${h % 2 === 0 ? "text-zinc-500" : "text-zinc-700"}`}>
-                  {String(h).padStart(2, "0")}:00
-                </span>
-                <div className={`flex-1 border-t ${h % 2 === 0 ? "border-zinc-800" : "border-zinc-800/40"}`}/>
-              </div>
-            ))}
-
-            {/* Línea NOW */}
-            {isToday && nowPx >= 0 && nowPx <= TOTAL_H && (
-              <div ref={nowRef} className="absolute left-11 right-0 z-20 pointer-events-none"
-                style={{ top: nowPx }}>
-                <div className="relative h-px bg-gradient-to-r from-red-500 via-red-500/60 to-transparent">
-                  <div className="absolute -left-1.5 -top-1.5 w-3 h-3 rounded-full bg-red-500
-                    shadow-[0_0_10px_rgba(239,68,68,0.8)]"/>
-                  <span className="absolute left-3 -top-4 text-[10px] font-bold text-red-400
-                    bg-zinc-950/90 px-1.5 py-0.5 rounded border border-red-500/30">
-                    {new Date().toLocaleTimeString("es-UY", { hour: "2-digit", minute: "2-digit" })}
-                  </span>
-                </div>
-              </div>
-            )}
-
-            {/* Bloques */}
-            {allBlocks.map(block => {
-              const top    = blockTopPx(block.start_time)
-              const height = blockHeightPx(block.start_time, block.end_time)
-              const done   = block.completed ?? false
-              return (
-                <div
-                  key={`${block.isDay ? "d" : "t"}-${block.id}`}
-                  id={`block-${block.isDay ? "d" : "t"}-${block.id}`}
-                  className="absolute left-11 right-0 rounded-xl px-3 py-2 touch-none select-none"
-                  style={{
-                    top, height,
-                    background: `linear-gradient(135deg, ${block.category_color}22 0%, ${block.category_color}0a 100%)`,
-                    borderLeft: `3px solid ${block.category_color}`,
-                    boxShadow: `0 1px 6px rgba(0,0,0,0.2), inset 0 0 0 1px ${block.category_color}1a`,
-                    opacity: done ? 0.45 : 1,
-                  }}
-                  onPointerDown={e => onPointerDown(e, block.id, block.isDay, block.start_time, block.end_time)}
-                  onPointerMove={onPointerMove}
-                  onPointerUp={onPointerUp}
-                >
-                  <div className="flex items-start justify-between gap-2 h-full">
-                    <div className="flex-1 min-w-0">
-                      <p className={`text-xs font-semibold leading-tight truncate
-                        ${done ? "line-through text-zinc-500" : "text-zinc-200"}`}>
-                        {block.title}
-                      </p>
-                      {height > 44 && (
-                        <p className="text-[10px] text-zinc-600 mt-0.5">
-                          {block.start_time} – {block.end_time}
-                        </p>
-                      )}
-                      {height > 60 && (
-                        <div className="flex gap-1.5 mt-1.5 flex-wrap">
-                          <span className="text-[9px] px-1.5 py-0.5 rounded-full"
-                            style={{ background: `${block.category_color}22`, color: block.category_color }}>
-                            {block.category_label}
-                          </span>
-                          {block.habit_id && (
-                            <span className="text-[9px] px-1.5 py-0.5 rounded-full
-                              bg-cyan-500/10 text-cyan-400 border border-cyan-500/20">
-                              ↔ hábito
-                            </span>
-                          )}
-                          {!block.isDay && (block as RoutineBlock & { task?: { id: number; title: string; completed: boolean } | null }).task && (
-                            <span className="text-[9px] px-1.5 py-0.5 rounded-full
-                              bg-violet-500/10 text-violet-400 border border-violet-500/20 max-w-[120px] truncate inline-block">
-                              ✓ {(block as RoutineBlock & { task?: { id: number; title: string; completed: boolean } | null }).task!.title}
-                            </span>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-1.5 flex-shrink-0 mt-0.5">
-                      <button
-                        onPointerDown={e => e.stopPropagation()}
-                        onClick={() => setModal({ open: true, mode: "edit", isDay: block.isDay, block })}
-                        className="w-5 h-5 rounded-full border border-slate-600 flex items-center justify-center
-                          hover:border-zinc-400 transition-all">
-                        <Pencil size={9} className="text-zinc-500"/>
-                      </button>
-                      <button
-                        onPointerDown={e => e.stopPropagation()}
-                        onClick={() => handleComplete(block.id, block.isDay, done, block.habit_id)}
-                        className={`w-5 h-5 rounded-full border flex items-center justify-center transition-all
-                          ${done ? "bg-green-500 border-green-500" : "border-slate-600 hover:border-green-500"}`}>
-                        {done && <Check size={9} className="text-white"/>}
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              )
-            })}
-
-            {allBlocks.length === 0 && (
-              <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                <p className="text-sm text-zinc-700">Sin bloques. Toca + para agregar.</p>
-              </div>
-            )}
+        ) : isDesktop ? (
+          <div className="flex gap-1 items-start">
+            {/* AM column */}
+            <div className="flex-1 min-w-0">
+              <p className="text-[10px] uppercase tracking-widest text-zinc-600 mb-2 ml-11">AM</p>
+              {renderColumn(amBlocks, START_HOUR, AM_HOURS, AM_TOTAL_H, isToday && nowMinutes < PM_START * 60, nowPx, isToday && nowMinutes < PM_START * 60)}
+            </div>
+            {/* Connector */}
+            <div className="flex flex-col items-center pt-10 text-zinc-600 w-8 flex-shrink-0">
+              <ArrowRight size={18}/>
+            </div>
+            {/* PM column */}
+            <div className="flex-1 min-w-0">
+              <p className="text-[10px] uppercase tracking-widest text-zinc-600 mb-2 ml-11">PM</p>
+              {renderColumn(pmBlocks, PM_START, PM_HOURS, PM_TOTAL_H, isToday && nowMinutes >= PM_START * 60, nowPxPM, isToday && nowMinutes >= PM_START * 60)}
+            </div>
           </div>
+        ) : (
+          renderColumn(allBlocks, START_HOUR, HOURS, TOTAL_H, isToday, nowPx, isToday)
         )}
       </div>
 
