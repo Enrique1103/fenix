@@ -5,7 +5,7 @@ import { Check, Pencil, Trash2, X, Plus, Move } from "lucide-react"
 import { Goal } from "@/lib/types"
 import { getGoalsGraph, addGoalDep, removeGoalDep } from "@/lib/api"
 
-const STORAGE_KEY    = "fenix_goal_graph_positions"
+const STORAGE_KEY    = "fenix_goal_graph_positions_v2"
 const DRAG_THRESHOLD = 5
 
 interface Pos { x: number; y: number }
@@ -50,7 +50,7 @@ export function GoalGraph({ goals, onEdit, onComplete, onDelete }: {
     const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? "{}")
     const next: Record<number, Pos> = {}
     goals.forEach((g, i) => {
-      next[g.id] = saved[g.id] ?? { x: 40 + (i % 3) * 200, y: 40 + Math.floor(i / 3) * 140 }
+      next[g.id] = saved[g.id] ?? { x: 40 + (i % 4) * 240, y: 40 + Math.floor(i / 4) * 160 }
     })
     setPositions(next)
   }, [goals])
@@ -132,8 +132,8 @@ export function GoalGraph({ goals, onEdit, onComplete, onDelete }: {
     await loadGraph()
   }
 
-  const NODE_W = 160
-  const NODE_H = 56
+  const NODE_W = 200
+  const NODE_H = 68
 
   const selectedGoal = goals.find(g => g.id === selected)
 
@@ -228,11 +228,11 @@ export function GoalGraph({ goals, onEdit, onComplete, onDelete }: {
               onClick={() => handleNodeClick(goal.id)}
             >
               {/* Content */}
-              <div className="px-3 py-2.5 pr-14">
-                <p className="text-xs font-semibold leading-tight truncate" style={{ color: text }}>
+              <div className="px-3 py-2 pr-14">
+                <p className="text-xs font-semibold leading-tight line-clamp-2" style={{ color: text }}>
                   {goal.title}
                 </p>
-                <p className="text-[9px] text-zinc-600 mt-0.5 truncate">
+                <p className="text-[9px] text-zinc-600 mt-0.5">
                   {goal.goal_type === "action" ? "Acción" : "Mentalización"} · {goal.horizon === "short" ? "Corto" : "Largo"}
                 </p>
               </div>
