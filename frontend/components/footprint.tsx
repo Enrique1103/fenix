@@ -1,16 +1,33 @@
-export function Footprint({ size = 20, color = "#ef4444", className = "" }: {
-  size?: number; color?: string; className?: string
+export function Footprint({ size = 20, color = "#ef4444", className = "", mirror = false }: {
+  size?: number; color?: string; className?: string; mirror?: boolean
 }) {
   return (
-    <svg width={size} height={size} viewBox="0 0 100 100" className={className}>
+    <svg
+      width={size}
+      height={Math.round(size * 1.6)}
+      viewBox="0 0 52 82"
+      style={{ display: "block", ...(mirror ? { transform: "scaleX(-1)" } : {}) }}
+      className={className}
+    >
+      {/* Main sole — arch on left (right-foot silhouette) */}
       <path
         fill={color}
-        d="M38 78c-3-10-8-16-8-30 0-16 8-26 18-26s14 10 14 24c0 16-6 24-9 32-2 6-12 6-15 0z
-           M22 30c2-4 8-4 9 1 1 4-2 8-6 7-3-1-5-5-3-8z
-           M34 18c2-3 7-2 8 2 1 4-3 7-6 6-3-1-4-5-2-8z
-           M48 14c2-3 6-2 7 2 1 4-3 6-6 5-2-1-3-4-1-7z
-           M62 18c2-3 6-1 6 3 0 3-3 5-6 4-2-1-2-5 0-7z"
+        d="
+          M 26 78
+          C 14 80  7 70  9 56
+          C 11 42 13 30 11 20
+          C  9 10 14  4 22  4
+          C 30  4 40  8 42 20
+          C 44 32 42 44 44 56
+          C 46 70 40 80 26 78 Z
+        "
       />
+      {/* Toes — big toe left, pinky right */}
+      <ellipse fill={color} cx="10" cy="5"  rx="7"   ry="8.5"/>
+      <ellipse fill={color} cx="22" cy="0"  rx="6.5" ry="7.5"/>
+      <ellipse fill={color} cx="33" cy="0"  rx="6"   ry="7"/>
+      <ellipse fill={color} cx="43" cy="4"  rx="5.5" ry="6.5"/>
+      <ellipse fill={color} cx="50" cy="13" rx="5"   ry="6"/>
     </svg>
   )
 }

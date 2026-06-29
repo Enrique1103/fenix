@@ -751,51 +751,7 @@ export default function RoutinePage() {
           </div>
         ))}
 
-        {/* Trail footprints */}
-        {colTrail.map((b, idx) => {
-          const top = blockTopPx(b.start_time, colStart)
-          const h   = blockHeightPx(b.start_time, b.end_time)
-          return (
-            <div key={`trail-${b.isDay ? "d" : "t"}-${b.id}`}
-              className="absolute pointer-events-none z-10"
-              style={{
-                top: top + h / 2 - 6,
-                left: idx % 2 === 0 ? 8 : 20,
-                transform: `rotate(${idx % 2 === 0 ? 15 : -10}deg)`,
-                opacity: Math.max(0.15, 0.4 - idx * 0.1),
-              }}>
-              <Footprint size={12} color="#94a3b8"/>
-            </div>
-          )
-        })}
-
-        {/* Now footprint — on current block */}
-        {colNowBlock && (
-          <div className="absolute pointer-events-none z-20 foot-now"
-            style={{
-              top: blockTopPx(colNowBlock.start_time, colStart)
-                + blockHeightPx(colNowBlock.start_time, colNowBlock.end_time) / 2 - 10,
-              left: 10,
-            }}>
-            <Footprint size={20} color="#ef4444"/>
-          </div>
-        )}
-
-        {/* Floating now footprint — between blocks */}
-        {showNow && colNowPx >= 0 && colNowPx <= colTotalH && !colNowBlock && (
-          <div className="absolute left-0 right-0 z-20 pointer-events-none flex items-center"
-            style={{ top: colNowPx }}>
-            <div className="foot-now pl-1.5">
-              <Footprint size={18} color="#ef4444"/>
-            </div>
-            <div className="flex-1 h-px bg-gradient-to-r from-red-500/40 to-transparent"/>
-            <span className="text-[10px] font-bold text-red-400 bg-zinc-950/90 px-1.5 py-0.5 rounded border border-red-500/30 mr-1">
-              {new Date().toLocaleTimeString("es-UY", { hour: "2-digit", minute: "2-digit" })}
-            </span>
-          </div>
-        )}
-
-        {/* Blocks */}
+        {/* Blocks — rendered before footprints so footprints paint on top */}
         {columnBlocks.map(block => {
           const top    = blockTopPx(block.start_time, colStart)
           const height = blockHeightPx(block.start_time, block.end_time)
@@ -870,6 +826,50 @@ export default function RoutinePage() {
         {columnBlocks.length === 0 && (
           <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
             <p className="text-sm text-zinc-700">Sin bloques</p>
+          </div>
+        )}
+
+        {/* Trail footprints — after blocks so they paint on top */}
+        {colTrail.map((b, idx) => {
+          const top = blockTopPx(b.start_time, colStart)
+          const h   = blockHeightPx(b.start_time, b.end_time)
+          return (
+            <div key={`trail-${b.isDay ? "d" : "t"}-${b.id}`}
+              className="absolute pointer-events-none"
+              style={{
+                top: top + h / 2 - 6,
+                left: idx % 2 === 0 ? 6 : 18,
+                transform: `rotate(${idx % 2 === 0 ? 12 : -12}deg)`,
+                opacity: Math.max(0.15, 0.4 - idx * 0.1),
+              }}>
+              <Footprint size={13} color="#94a3b8" mirror={idx % 2 === 1}/>
+            </div>
+          )
+        })}
+
+        {/* Now footprint — on current block */}
+        {colNowBlock && (
+          <div className="absolute pointer-events-none foot-now"
+            style={{
+              top: blockTopPx(colNowBlock.start_time, colStart)
+                + blockHeightPx(colNowBlock.start_time, colNowBlock.end_time) / 2 - 12,
+              left: 6,
+            }}>
+            <Footprint size={22} color="#ef4444"/>
+          </div>
+        )}
+
+        {/* Floating now footprint — between blocks */}
+        {showNow && colNowPx >= 0 && colNowPx <= colTotalH && !colNowBlock && (
+          <div className="absolute left-0 right-0 pointer-events-none flex items-center"
+            style={{ top: colNowPx }}>
+            <div className="foot-now pl-1">
+              <Footprint size={20} color="#ef4444"/>
+            </div>
+            <div className="flex-1 h-px bg-gradient-to-r from-red-500/40 to-transparent"/>
+            <span className="text-[10px] font-bold text-red-400 bg-zinc-950/90 px-1.5 py-0.5 rounded border border-red-500/30 mr-1">
+              {new Date().toLocaleTimeString("es-UY", { hour: "2-digit", minute: "2-digit" })}
+            </span>
           </div>
         )}
       </div>
