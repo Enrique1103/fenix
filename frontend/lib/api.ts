@@ -1,4 +1,4 @@
-import { Habit, DayRecords, MonthSummary, HabitMonthStats, Task, Goal, GoalProgress, GoalsGraph, Reminder, RoutineTemplate, RoutineBlock, RoutineDayBlock, RoutineCategory, RoutineDayView } from "./types"
+import { Habit, DayRecords, MonthSummary, HabitMonthStats, Goal, GoalProgress, GoalsGraph, Reminder, RoutineTemplate, RoutineBlock, RoutineDayBlock, RoutineCategory, RoutineDayView } from "./types"
 import { supabase } from "./supabase"
 
 const BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000"
@@ -140,32 +140,6 @@ export const reopenGoal = (goalId: number): Promise<Goal> =>
 export const getCompletedGoals = (): Promise<Goal[]> =>
   req("/goals/achievements")
 
-// ── Tasks ─────────────────────────────────────────────────────────────────────
-
-export const getTasks = (): Promise<Task[]> =>
-  req(`/tasks`)
-
-export const createTask = (data: {
-  title: string; deadline?: string;
-  parent_task_id?: number; description?: string
-}): Promise<Task> =>
-  req("/tasks", { method: "POST", body: JSON.stringify(data) })
-
-export const updateTask = (id: number, data: {
-  title?: string; completed?: boolean; deadline?: string | null;
-  description?: string | null
-}): Promise<Task> =>
-  req(`/tasks/${id}`, { method: "PATCH", body: JSON.stringify(data) })
-
-export const deleteTask = (id: number): Promise<void> =>
-  req(`/tasks/${id}`, { method: "DELETE" })
-
-export const addTaskDep = (taskId: number, depId: number): Promise<void> =>
-  req(`/tasks/${taskId}/deps/${depId}`, { method: "POST" })
-
-export const removeTaskDep = (taskId: number, depId: number): Promise<void> =>
-  req(`/tasks/${taskId}/deps/${depId}`, { method: "DELETE" })
-
 // ── Mood ──────────────────────────────────────────────────────────────────────
 
 export const getMonthMood = (year: number, month: number): Promise<Record<string, number>> =>
@@ -279,9 +253,6 @@ export const deleteDayBlock = (id: number): Promise<void> =>
 export const completeBlock = (blockId: number, date: string, completed: boolean): Promise<{ ok: boolean }> =>
   req("/routine/complete", { method: "POST", body: JSON.stringify({ block_id: blockId, date, completed }) })
 
-export const setBlockDayTask = (blockId: number, date: string, taskId: number | null): Promise<{ ok: boolean }> =>
-  req("/routine/blocks/day-task", { method: "POST", body: JSON.stringify({ block_id: blockId, date, task_id: taskId }) })
-
 // ── Reminders ─────────────────────────────────────────────────────────────────
 
 export const getReminders = (): Promise<Reminder[]> =>
@@ -295,13 +266,3 @@ export const updateReminder = (id: number, data: Partial<Omit<Reminder, "id" | "
 
 export const deleteReminder = (id: number): Promise<void> =>
   req(`/reminders/${id}`, { method: "DELETE" })
-
-// ── Sugerencia de tarea ───────────────────────────────────────────────────────
-
-export interface SuggestedTask {
-  task: Task | null
-  reason: string | null
-}
-
-export const getSuggestedTask = (): Promise<SuggestedTask> =>
-  req("/tasks/suggested")

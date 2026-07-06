@@ -18,21 +18,6 @@ class RecordSet(BaseModel):
     state: Optional[str] = None  # 'done' | 'rest' | 'failed' | None = borrar
 
 
-class TaskCreate(BaseModel):
-    title: str
-    type: str = "general"
-    deadline: Optional[str] = None
-    parent_task_id: Optional[int] = None
-    description: Optional[str] = None
-
-
-class TaskUpdate(BaseModel):
-    title: Optional[str] = None
-    completed: Optional[bool] = None
-    deadline: Optional[str] = None
-    description: Optional[str] = None
-
-
 # ── Metas ─────────────────────────────────────────────────────────────────────
 
 class GoalCreate(BaseModel):
@@ -77,7 +62,6 @@ class BlockCreate(BaseModel):
     category_label: str
     category_color: str = "#6366f1"
     habit_id: Optional[str] = None
-    task_id: Optional[int] = None
     notes: Optional[str] = None
     ord: int = 0
 
@@ -89,7 +73,6 @@ class BlockUpdate(BaseModel):
     category_label: Optional[str] = None
     category_color: Optional[str] = None
     habit_id: Optional[str] = None
-    task_id: Optional[int] = None
     notes: Optional[str] = None
     ord: Optional[int] = None
 
@@ -106,7 +89,6 @@ class DayBlockCreate(BaseModel):
     category_label: str
     category_color: str = "#6366f1"
     habit_id: Optional[str] = None
-    task_id: Optional[int] = None
     notes: Optional[str] = None
 
 class DayBlockUpdate(BaseModel):
@@ -117,7 +99,6 @@ class DayBlockUpdate(BaseModel):
     category_label: Optional[str] = None
     category_color: Optional[str] = None
     habit_id: Optional[str] = None
-    task_id: Optional[int] = None
     notes: Optional[str] = None
     completed: Optional[bool] = None
 
@@ -129,8 +110,3 @@ class BlockCompletion(BaseModel):
 class DayOverride(BaseModel):
     date: str
     template_id: Optional[int] = None
-
-class BlockDayTaskSet(BaseModel):
-    block_id: int
-    date: str
-    task_id: Optional[int] = None

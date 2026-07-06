@@ -54,18 +54,6 @@ export interface Reminder {
   created_at: string
 }
 
-export interface Task {
-  id: number
-  title: string
-  description: string | null
-  type?: string  // legacy — no longer used in UI, kept for DB compat
-  deadline: string | null
-  completed: boolean
-  created_at: string
-  parent_task_id: number | null
-  dep_ids: number[]
-}
-
 // ── Rutina ────────────────────────────────────────────────────────────────────
 
 export interface RoutineTemplate {
@@ -85,12 +73,9 @@ export interface RoutineBlock {
   category_label: string
   category_color: string
   habit_id: string | null
-  task_id?: number | null
   notes: string | null
   ord: number
   completed?: boolean
-  effective_task_id?: number | null
-  task?: { id: number; title: string; completed: boolean } | null
 }
 
 export interface RoutineDayBlock {
@@ -103,7 +88,6 @@ export interface RoutineDayBlock {
   category_label: string
   category_color: string
   habit_id: string | null
-  task_id?: number | null
   notes: string | null
   completed: boolean
 }

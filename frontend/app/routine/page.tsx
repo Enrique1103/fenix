@@ -2,7 +2,6 @@
 
 import { useEffect, useState, useRef } from "react"
 import { ChevronLeft, ChevronRight, Plus, Check, ChevronDown, Pencil, Trash2, X, ArrowRight } from "lucide-react"
-import { Footprint } from "@/components/footprint"
 import {
   setDayOverride,
   createTemplate, deleteTemplate,
@@ -10,10 +9,10 @@ import {
   createDayBlock, updateDayBlock, deleteDayBlock,
   completeBlock,
   createCategory,
-  setRecord, updateTask, setBlockDayTask,
+  setRecord,
 } from "@/lib/api"
-import { RoutineTemplate, RoutineBlock, RoutineDayBlock, RoutineDayView, RoutineCategory, Task } from "@/lib/types"
-import { useTasks, useDayView, useTemplates, useCategories } from "@/lib/swr-hooks"
+import { RoutineTemplate, RoutineBlock, RoutineDayBlock, RoutineDayView, RoutineCategory } from "@/lib/types"
+import { useDayView, useTemplates, useCategories } from "@/lib/swr-hooks"
 
 // ── Constantes ────────────────────────────────────────────────────────────────
 
@@ -239,13 +238,6 @@ function BlockModal({
   const [newCatColor, setNewCatColor]   = useState("#8b5cf6")
   const [activePicker, setActivePicker] = useState<"start" | "end" | null>(null)
   const [habitOpen, setHabitOpen]       = useState(false)
-  const [taskId, setTaskId]             = useState<number | null>(
-    (block as (RoutineBlock & { effective_task_id?: number | null }))?.effective_task_id
-    ?? (block as RoutineBlock)?.task_id
-    ?? null
-  )
-  const { data: allFetchedTasks = [] } = useTasks()
-  const tasks = allFetchedTasks.filter(tk => !tk.completed)
 
   const allCategories = [
     ...baseCategories.map(c => ({ id: c.slug, label: c.label, color: c.color })),
@@ -268,21 +260,13 @@ function BlockModal({
       }
       if (mode === "create") {
         if (saveToTemplate && templateId) {
-          const newBlock = await createBlock({ ...data, template_id: templateId, ord: 0 })
-          if (taskId) await setBlockDayTask(newBlock.id, date, taskId)
+          await createBlock({ ...data, template_id: templateId, ord: 0 })
         } else {
           await createDayBlock({ ...data, date })
         }
       } else {
         if (isDay) await updateDayBlock(block!.id!, data)
-        else {
-          await updateBlock(block!.id!, data)
-          // Vincular tarea del día (solo para bloques de plantilla)
-          const prevTaskId = (block as RoutineBlock & { effective_task_id?: number | null })?.effective_task_id ?? (block as RoutineBlock)?.task_id ?? null
-          if (taskId !== prevTaskId) {
-            await setBlockDayTask(block!.id!, date, taskId)
-          }
-        }
+        else await updateBlock(block!.id!, data)
       }
       onSave()
       onClose()
@@ -450,25 +434,6 @@ function BlockModal({
                 </div>
               )}
             </div>
-          </div>
-        )}
-
-        {/* Tarea del día (solo para bloques de plantilla) */}
-        {!isDay && tasks.length > 0 && (
-          <div className="mb-3">
-            <label className="text-[10px] uppercase tracking-widest text-zinc-600 mb-1.5 block">
-              Tarea de hoy (opcional)
-            </label>
-            <select
-              className="w-full bg-zinc-800 border border-slate-700/40 rounded-xl px-3 py-2.5
-                text-sm text-zinc-300 outline-none focus:border-cyan-500/40"
-              value={taskId ?? ""}
-              onChange={e => setTaskId(e.target.value ? Number(e.target.value) : null)}>
-              <option value="">— Sin vincular —</option>
-              {tasks.map(t => (
-                <option key={t.id} value={t.id}>{t.title}</option>
-              ))}
-            </select>
           </div>
         )}
 
@@ -703,13 +668,6 @@ export default function RoutinePage() {
   const pmBlocks = allBlocks.filter(b => timeToMinutes(b.start_time) >= PM_START * 60)
 
   const nowMinutes    = new Date().getHours() * 60 + new Date().getMinutes()
-  const nowBlockIdx   = isToday
-    ? allBlocks.findIndex(b => timeToMinutes(b.start_time) <= nowMinutes && timeToMinutes(b.end_time) > nowMinutes)
-    : -1
-  const nowBlock      = nowBlockIdx >= 0 ? allBlocks[nowBlockIdx] : null
-  const trailBlocks   = nowBlockIdx > 0
-    ? allBlocks.slice(Math.max(0, nowBlockIdx - 3), nowBlockIdx).reverse()
-    : []
 
   // nowPx is relative to START_HOUR=6; PM column needs offset
   const nowPxPM = nowPx - (PM_START - START_HOUR) * ROW_H
@@ -723,12 +681,6 @@ export default function RoutinePage() {
     colNowPx: number,
     attachScrollRef: boolean,
   ) {
-    const colTrail = trailBlocks.filter(b =>
-      columnBlocks.some(cb => cb.id === b.id && cb.isDay === b.isDay)
-    )
-    const colNowBlock = nowBlock && columnBlocks.some(cb => cb.id === nowBlock.id && cb.isDay === nowBlock.isDay)
-      ? nowBlock : null
-
     return (
       <div className="relative" style={{ height: colTotalH }}>
 
@@ -751,7 +703,7 @@ export default function RoutinePage() {
           </div>
         ))}
 
-        {/* Blocks — rendered before footprints so footprints paint on top */}
+        {/* Blocks — rendered before the now-line so it paints on top */}
         {columnBlocks.map(block => {
           const top    = blockTopPx(block.start_time, colStart)
           const height = blockHeightPx(block.start_time, block.end_time)
@@ -793,12 +745,6 @@ export default function RoutinePage() {
                           ↔ hábito
                         </span>
                       )}
-                      {!block.isDay && (block as RoutineBlock & { task?: { id: number; title: string; completed: boolean } | null }).task && (
-                        <span className="text-[9px] px-1.5 py-0.5 rounded-lg
-                          bg-violet-500/10 text-violet-400 border border-violet-500/20 max-w-[120px] truncate inline-block">
-                          ✓ {(block as RoutineBlock & { task?: { id: number; title: string; completed: boolean } | null }).task!.title}
-                        </span>
-                      )}
                     </div>
                   )}
                 </div>
@@ -829,45 +775,12 @@ export default function RoutinePage() {
           </div>
         )}
 
-        {/* Trail footprints — after blocks so they paint on top */}
-        {colTrail.map((b, idx) => {
-          const top = blockTopPx(b.start_time, colStart)
-          const h   = blockHeightPx(b.start_time, b.end_time)
-          return (
-            <div key={`trail-${b.isDay ? "d" : "t"}-${b.id}`}
-              className="absolute pointer-events-none"
-              style={{
-                top: top + h / 2 - 6,
-                left: idx % 2 === 0 ? 6 : 18,
-                transform: `rotate(${idx % 2 === 0 ? 12 : -12}deg)`,
-                opacity: Math.max(0.15, 0.4 - idx * 0.1),
-              }}>
-              <Footprint size={13} color="#94a3b8" mirror={idx % 2 === 1}/>
-            </div>
-          )
-        })}
-
-        {/* Now footprint — on current block */}
-        {colNowBlock && (
-          <div className="absolute pointer-events-none foot-now"
-            style={{
-              top: blockTopPx(colNowBlock.start_time, colStart)
-                + blockHeightPx(colNowBlock.start_time, colNowBlock.end_time) / 2 - 12,
-              left: 6,
-            }}>
-            <Footprint size={22} color="#ef4444"/>
-          </div>
-        )}
-
-        {/* Floating now footprint — between blocks */}
-        {showNow && colNowPx >= 0 && colNowPx <= colTotalH && !colNowBlock && (
-          <div className="absolute left-0 right-0 pointer-events-none flex items-center"
+        {/* Now line — dashed red line marking the current time */}
+        {showNow && colNowPx >= 0 && colNowPx <= colTotalH && (
+          <div className="absolute left-11 right-0 pointer-events-none flex items-center"
             style={{ top: colNowPx }}>
-            <div className="foot-now pl-1">
-              <Footprint size={20} color="#ef4444"/>
-            </div>
-            <div className="flex-1 h-px bg-gradient-to-r from-red-500/40 to-transparent"/>
-            <span className="text-[10px] font-bold text-red-400 bg-zinc-950/90 px-1.5 py-0.5 rounded border border-red-500/30 mr-1">
+            <div className="flex-1 h-0 border-t-2 border-dashed border-red-500"/>
+            <span className="text-[10px] font-bold text-red-400 bg-zinc-950/90 px-1.5 py-0.5 rounded border border-red-500/30 ml-1">
               {new Date().toLocaleTimeString("es-UY", { hour: "2-digit", minute: "2-digit" })}
             </span>
           </div>

@@ -6,7 +6,7 @@ from models import (
     BlockCreate, BlockUpdate,
     CategoryCreate,
     DayBlockCreate, DayBlockUpdate,
-    BlockCompletion, DayOverride, BlockDayTaskSet,
+    BlockCompletion, DayOverride,
 )
 
 router = APIRouter(prefix="/routine", tags=["routine"])
@@ -144,29 +144,14 @@ def get_day(date: str, user_id: str = Depends(get_user_id)):
 
         block_ids = [b["id"] for b in blocks_res]
         completions = {}
-        day_tasks = {}
         if block_ids:
             comp_res = db.table("routine_block_completions").select("block_id, completed")\
                 .in_("block_id", block_ids).eq("date", date).eq("user_id", user_id).execute().data
             completions = {c["block_id"]: c["completed"] for c in comp_res}
 
-            dt_res = db.table("routine_block_day_tasks").select("block_id, task_id")\
-                .in_("block_id", block_ids).eq("date", date).eq("user_id", user_id).execute().data
-            day_tasks = {r["block_id"]: r["task_id"] for r in dt_res}
-
-        all_task_ids = set(t for t in day_tasks.values() if t) | \
-                       set(b["task_id"] for b in blocks_res if b.get("task_id"))
-        tasks_map = {}
-        if all_task_ids:
-            tasks_res = db.table("tasks").select("id, title, completed")\
-                .in_("id", list(all_task_ids)).execute().data
-            tasks_map = {t["id"]: t for t in tasks_res}
-
         template_blocks = [{
             **b,
             "completed": completions.get(b["id"], False),
-            "effective_task_id": day_tasks.get(b["id"]) or b.get("task_id"),
-            "task": tasks_map.get(day_tasks.get(b["id"]) or b.get("task_id")),
         } for b in blocks_res]
 
     day_blocks = db.table("routine_day_blocks").select("*")\
@@ -276,43 +261,4 @@ def complete_block(body: BlockCompletion, user_id: str = Depends(get_user_id)):
                 "user_id": user_id,
             }).execute()
 
-    # Sync linked task
-    day_task_res = db.table("routine_block_day_tasks").select("task_id")\
-        .eq("block_id", body.block_id).eq("date", body.date).execute().data
-    effective_task_id = day_task_res[0]["task_id"] if day_task_res else None
-    if not effective_task_id:
-        block_task_res = db.table("routine_blocks").select("task_id")\
-            .eq("id", body.block_id).execute().data
-        effective_task_id = block_task_res[0].get("task_id") if block_task_res else None
-    if effective_task_id:
-        db.table("tasks").update({"completed": body.completed})\
-            .eq("id", effective_task_id).eq("user_id", user_id).execute()
-
-    return {"ok": True}
-
-
-# ── Vínculo tarea por día ──────────────────────────────────────────────────────
-
-@router.post("/blocks/day-task")
-def set_block_day_task(body: BlockDayTaskSet, user_id: str = Depends(get_user_id)):
-    db = get_db()
-    existing = db.table("routine_block_day_tasks").select("id")\
-        .eq("block_id", body.block_id).eq("date", body.date)\
-        .eq("user_id", user_id).execute().data
-
-    if body.task_id is None:
-        if existing:
-            db.table("routine_block_day_tasks").delete().eq("id", existing[0]["id"]).execute()
-        return {"ok": True}
-
-    if existing:
-        db.table("routine_block_day_tasks").update({"task_id": body.task_id})\
-            .eq("id", existing[0]["id"]).execute()
-    else:
-        db.table("routine_block_day_tasks").insert({
-            "user_id": user_id,
-            "block_id": body.block_id,
-            "date": body.date,
-            "task_id": body.task_id,
-        }).execute()
     return {"ok": True}

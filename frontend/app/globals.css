@@ -221,13 +221,6 @@ select option { background-color: #0f172a; color: #e2e8f0; }
   --card-text: #0f172a;
 }
 
-/* ── Footprint blink ── */
-@keyframes footBlink {
-  0%, 100% { opacity: 1; transform: scale(1.15); }
-  50%       { opacity: 0.4; transform: scale(0.95); }
-}
-.foot-now { animation: footBlink 1.3s ease-in-out infinite; }
-
 /* ── Clock face ── */
 .clock-face { fill: rgba(18, 18, 22, 0.97); }
 [data-theme="light"] .clock-face { fill: rgba(30, 41, 59, 0.92); }

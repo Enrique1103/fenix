@@ -3,7 +3,7 @@
 import Link from "next/link"
 import Image from "next/image"
 import { usePathname } from "next/navigation"
-import { Activity, BarChart2, Target, ClipboardList, Bell, Settings, Sun, Moon, Clock } from "lucide-react"
+import { Activity, BarChart2, Target, Bell, Settings, Sun, Moon, Clock } from "lucide-react"
 import { useEffect, useState } from "react"
 import { getDailyQuotes, getSettings } from "@/lib/quote-utils"
 import { Quote } from "@/lib/quotes"
@@ -12,7 +12,6 @@ const NAV_MAIN = [
   { href: "/",         icon: Activity,      label: "Hábitos"      },
   { href: "/stats",    icon: BarChart2,     label: "Estadísticas" },
   { href: "/goals",    icon: Target,        label: "Metas"        },
-  { href: "/tasks",    icon: ClipboardList, label: "Tareas"       },
   { href: "/routine",  icon: Clock,         label: "Rutina"       },
 ]
 

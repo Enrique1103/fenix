@@ -9,7 +9,6 @@ import { MONTHS, DAYS_SHORT, daysInMonth, firstWeekdayOffset, toISODate } from "
 import { HabitCell } from "@/components/habit-cell"
 import { MoodEmoji } from "@/components/mood-emoji"
 import { MonthlyEKGChart } from "@/components/monthly-ekg-chart"
-import { SuggestedTaskCard } from "@/components/suggested-task-card"
 import { diffClass } from "@/lib/color"
 import { Toast } from "@/components/toast"
 
@@ -665,7 +664,6 @@ export default function HabitTrackerPage() {
         </div>
       ) : (
         <>
-        <div className="px-4 pt-3 pb-1"><SuggestedTaskCard/></div>
         {view === "weekly" ? (
         <div className="mt-2">
         <WeeklyView

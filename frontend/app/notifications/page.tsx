@@ -1,8 +1,8 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { Bell, Flame, Star, Trophy, CheckCircle2, AlertTriangle } from "lucide-react"
-import { getHabits, getDayRecords, getWeeklyTrend, getTasks, getAchievements, upsertAchievement } from "@/lib/api"
+import { Bell, Flame, Star, Trophy } from "lucide-react"
+import { getHabits, getDayRecords, getWeeklyTrend, getAchievements, upsertAchievement } from "@/lib/api"
 import { Habit, DayRecords } from "@/lib/types"
 
 function getToday() {
@@ -22,10 +22,9 @@ interface Achievement {
 }
 
 async function detectTodayAchievements(): Promise<Achievement[]> {
-  const [habits, trend, tasks] = await Promise.all([
+  const [habits, trend] = await Promise.all([
     getHabits(),
     getWeeklyTrend(),
-    getTasks(),
   ])
 
   const today = getToday()
@@ -86,36 +85,6 @@ async function detectTodayAchievements(): Promise<Achievement[]> {
     }
   }
 
-  // ── Tareas al día ─────────────────────────────────────────────────────────
-  const overdue   = tasks.filter(t => !t.completed && !!t.deadline && t.deadline < today)
-  const completed = tasks.filter(t => t.completed)
-
-  if (overdue.length === 0 && tasks.length > 0) {
-    list.push({
-      id: `tasks_uptodate_${today}`,
-      type: "tasks_uptodate",
-      date: today,
-      meta: { completed: completed.length },
-      Icon: CheckCircle2,
-      color: "text-blue-400",
-      bg: "bg-blue-500/10",
-      title: "Tareas al día",
-      sub: `Sin tareas vencidas. ${completed.length} completada${completed.length !== 1 ? "s" : ""} en total.`,
-    })
-  } else if (overdue.length > 0) {
-    list.push({
-      id: `tasks_overdue_${today}`,
-      type: "tasks_overdue",
-      date: today,
-      meta: { overdue: overdue.length },
-      Icon: AlertTriangle,
-      color: "text-red-400",
-      bg: "bg-red-500/10",
-      title: `${overdue.length} tarea${overdue.length > 1 ? "s" : ""} vencida${overdue.length > 1 ? "s" : ""}`,
-      sub: overdue.slice(0, 2).map(t => t.title).join(" · ") + (overdue.length > 2 ? ` y ${overdue.length - 2} más` : ""),
-    })
-  }
-
   return list
 }
 
@@ -124,8 +93,6 @@ function iconForType(type: string): React.ElementType {
     perfect_day:       Star,
     best_week:         Flame,
     two_perfect_weeks: Trophy,
-    tasks_uptodate:    CheckCircle2,
-    tasks_overdue:     AlertTriangle,
   }
   return map[type] ?? Bell
 }
@@ -135,8 +102,6 @@ function styleForType(type: string): { color: string; bg: string } {
     perfect_day:       { color: "text-green-400",  bg: "bg-green-500/10"  },
     best_week:         { color: "text-orange-400", bg: "bg-orange-500/10" },
     two_perfect_weeks: { color: "text-yellow-400", bg: "bg-yellow-500/10" },
-    tasks_uptodate:    { color: "text-blue-400",   bg: "bg-blue-500/10"   },
-    tasks_overdue:     { color: "text-red-400",    bg: "bg-red-500/10"    },
   }
   return map[type] ?? { color: "text-zinc-400", bg: "bg-zinc-800" }
 }
@@ -149,10 +114,6 @@ function labelForRecord(type: string, meta: Record<string, unknown> | null): { t
       return { title: `Semana de ${meta?.pct ?? "?"}%`, sub: "Tu mejor semana reciente." }
     case "two_perfect_weeks":
       return { title: "Dos semanas perfectas", sub: `${meta?.count ?? "?"} semanas al 100%.` }
-    case "tasks_uptodate":
-      return { title: "Tareas al día", sub: `${meta?.completed ?? "?"} tareas completadas, sin vencidas.` }
-    case "tasks_overdue":
-      return { title: `${meta?.overdue ?? "?"} tarea(s) vencida(s)`, sub: "Hay tareas con deadline pasado." }
     default:
       return { title: type, sub: "" }
   }

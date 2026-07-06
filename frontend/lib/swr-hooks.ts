@@ -1,18 +1,14 @@
 import useSWR from "swr"
 import {
-  getTasks, getGoals, getHabits,
+  getGoals, getHabits,
   getMonthAll, getMonthSummary, getMonthMood, getStreak,
   getMonthStats, getRecovery, getMoodAvg,
   getDayView, getTemplates, getCategories,
   type MonthStats, type RecoveryStats,
 } from "./api"
-import type { Task, Goal, Habit, RoutineDayView, RoutineTemplate, RoutineCategory } from "./types"
+import type { Goal, Habit, RoutineDayView, RoutineTemplate, RoutineCategory } from "./types"
 
 const opts = { revalidateOnFocus: false, dedupingInterval: 5000 }
-
-export function useTasks() {
-  return useSWR<Task[]>("tasks", getTasks, opts)
-}
 
 export function useGoals() {
   return useSWR<Goal[]>("goals", getGoals, opts)
